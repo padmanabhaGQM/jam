@@ -1,16 +1,22 @@
-/**
- * evidence.mjs — evidence, not claims.
- *
- * Contract (when implemented):
- *   - captureCodexEvidence(result): store Codex's reported commands/diffs/output verbatim.
- *   - rerunVerification(cmd, cwd): the PLUGIN runs the verification command itself
- *     and records the real exit code. A sprint's evidence gate requires exit 0 from
- *     THIS run — never Codex's claim (design spec §5).
- *   - Honest limit: proves tests ran & passed, not that they are meaningful (caveat C-2).
- *
- * Not yet implemented (scaffold).
- */
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 
-export function notImplemented() {
-  throw new Error("jam/evidence.mjs not yet implemented");
+export function runVerification(command, cwd) {
+  if (!command) throw new Error("runVerification: command required");
+  const result = spawnSync(command, { cwd, shell: true, encoding: "utf8" });
+  return {
+    command,
+    exitCode: result.status === null ? -1 : result.status,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? ""
+  };
+}
+
+export function captureEvidence(dir, sprintId, evidence) {
+  const evDir = path.join(dir, "evidence");
+  fs.mkdirSync(evDir, { recursive: true });
+  const p = path.join(evDir, `${sprintId}.json`);
+  fs.writeFileSync(p, JSON.stringify(evidence, null, 2));
+  return p;
 }
