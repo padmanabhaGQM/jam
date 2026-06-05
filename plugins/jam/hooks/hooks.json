@@ -1,0 +1,27 @@
+{
+  "description": "jam control surface: deterministic gate enforcement and run rehydration.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start-hook.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/gate-hook.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

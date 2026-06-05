@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam/verdict.schema.json",
+  "title": "jam review verdict",
+  "description": "Structured review verdict that can close a gate. A vague 'looks good' is invalid. The reviewer MUST NOT be the author (anti-collusion).",
+  "type": "object",
+  "required": ["reviewer", "author", "target", "testsRan", "verdict", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "reviewer": { "type": "string", "description": "Who produced this verdict (must differ from author)." },
+    "author": { "type": "string", "description": "Who authored the work under review." },
+    "target": { "type": "string", "description": "Sprint id / artifact under review." },
+    "testsRan": { "type": "boolean" },
+    "verificationExitCode": { "type": ["integer", "null"] },
+    "verdict": { "enum": ["pass", "fail", "needs-changes"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "description"],
+        "properties": {
+          "severity": { "enum": ["blocker", "major", "minor", "nit"] },
+          "description": { "type": "string" },
+          "location": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "unresolvedBlockers": { "type": "integer", "minimum": 0 }
+  }
+}

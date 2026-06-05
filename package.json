@@ -1,0 +1,14 @@
+{
+  "name": "jam",
+  "version": "0.0.1",
+  "description": "Honest, controlled Claude–Codex build loop for Claude Code.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "license": "UNLICENSED"
+}

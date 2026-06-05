@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Per-run state written by the harness into a target project (never committed from a target)
+docs/superpowers/loop-runs/
+
+# Local env / secrets
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# Test/coverage artifacts
+coverage/
+*.tmp

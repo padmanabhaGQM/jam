@@ -1,0 +1,21 @@
+{
+  "name": "neel-plugins",
+  "owner": {
+    "name": "Padmanabha Banerjee (Neel)"
+  },
+  "metadata": {
+    "description": "Neel's Claude Code plugins.",
+    "version": "0.0.1"
+  },
+  "plugins": [
+    {
+      "name": "jam",
+      "description": "Honest, controlled Claude–Codex build loop. Claude is the brain (architect/planner/reviewer), Codex is the hands (implementer), enforced by a deterministic control surface.",
+      "version": "0.0.1",
+      "author": {
+        "name": "Padmanabha Banerjee (Neel)"
+      },
+      "source": "./plugins/jam"
+    }
+  ]
+}

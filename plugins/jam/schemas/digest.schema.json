@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "jam/digest.schema.json",
+  "title": "jam intermediate-state digest",
+  "description": "Glanceable supervision artifact. The gate hook refuses to advance unless a conforming digest exists. Must expose all four drift-detectors.",
+  "type": "object",
+  "required": ["runId", "phase", "summary", "traceToArchitecture", "decisions", "globalMap", "coverage"],
+  "additionalProperties": false,
+  "properties": {
+    "runId": { "type": "string" },
+    "phase": { "type": "string" },
+    "sprint": { "type": ["integer", "null"] },
+    "summary": { "type": "string", "description": "Plain-language summary of what just happened / is about to happen." },
+    "traceToArchitecture": {
+      "type": "object",
+      "description": "Detector 1: link current work back to the aligned architecture.",
+      "required": ["componentsTouched"],
+      "properties": {
+        "componentsTouched": { "type": "array", "items": { "type": "string" } },
+        "gapFromAgreed": { "type": ["string", "null"], "description": "Any divergence from what was agreed, or null." }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "Detector 2: design choices made this step, surfaced for taste-veto before they are buried.",
+      "items": {
+        "type": "object",
+        "required": ["choice", "alternatives", "why"],
+        "properties": {
+          "choice": { "type": "string" },
+          "alternatives": { "type": "array", "items": { "type": "string" } },
+          "why": { "type": "string" }
+        }
+      }
+    },
+    "globalMap": {
+      "type": "object",
+      "description": "Detector 3: the whole-project map with current position; flags local-hack spiralling.",
+      "required": ["mermaid", "currentPosition", "isLocallyScopedRisk"],
+      "properties": {
+        "mermaid": { "type": "string", "description": "Mermaid/Graphviz source for the project map." },
+        "currentPosition": { "type": "string" },
+        "isLocallyScopedRisk": { "type": "boolean" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "Detector 4: spec/plan pointer coverage delta.",
+      "required": ["addressed", "dropped"],
+      "properties": {
+        "addressed": { "type": "array", "items": { "type": "string" } },
+        "dropped": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "activeDirectives": {
+      "type": "array",
+      "description": "Steering directives still in force and whether this step honored them.",
+      "items": {
+        "type": "object",
+        "required": ["id", "honored"],
+        "properties": {
+          "id": { "type": "string" },
+          "honored": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}
