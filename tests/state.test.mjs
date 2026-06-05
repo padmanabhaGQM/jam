@@ -42,6 +42,12 @@ test("validateState rejects bad mode/status", () => {
   assert.throws(() => validateState(s), /invalid mode/);
 });
 
+test("validateState rejects bad status", () => {
+  const s = createInitialState({ runId: "r1", now: "t" });
+  s.gates.ALIGN.status = "bogus";
+  assert.throws(() => validateState(s), /invalid status/);
+});
+
 test("writeState/readState round-trips atomically", () => {
   const root = tmpProject();
   const dir = runDir(root, "r1");
@@ -50,6 +56,8 @@ test("writeState/readState round-trips atomically", () => {
   assert.ok(fs.existsSync(path.join(dir, "state.json")));
   const back = readState(dir);
   assert.equal(back.runId, "r1");
+  const leftover = fs.readdirSync(dir).filter((f) => f.endsWith(".tmp"));
+  assert.deepEqual(leftover, []);
 });
 
 test("getGate throws on unknown, addGate adds an auto gate", () => {

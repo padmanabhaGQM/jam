@@ -50,7 +50,7 @@ export function writeState(dir, state) {
   validateState(state);
   fs.mkdirSync(dir, { recursive: true });
   const p = statePath(dir);
-  const tmp = `${p}.tmp`;
+  const tmp = `${p}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
   fs.renameSync(tmp, p);
   return p;
