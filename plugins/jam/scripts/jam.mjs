@@ -4,10 +4,11 @@
  * Project root = process.cwd(); active run = the ACTIVE pointer under it.
  */
 import process from "node:process";
+import fs from "node:fs";
 
 import { readActiveRunId, runDir } from "./lib/paths.mjs";
 import { readState } from "./lib/state.mjs";
-import { createRun } from "./lib/actions.mjs";
+import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -19,8 +20,14 @@ function parseFlags(args) {
   const flags = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
-      flags[args[i].slice(2)] = args[i + 1];
-      i++;
+      const key = args[i].slice(2);
+      const next = args[i + 1];
+      if (next === undefined || next.startsWith("--")) {
+        flags[key] = undefined; // missing value → absent
+      } else {
+        flags[key] = next;
+        i++;
+      }
     } else {
       positional.push(args[i]);
     }
@@ -60,6 +67,63 @@ function cmdStatus(cwd) {
   process.stdout.write(lines.join("\n") + "\n");
 }
 
+function cmdRenderDigest(cwd, positional, flags) {
+  const gateId = positional[0];
+  if (!gateId || !flags.file) fail("usage: jam render-digest <gateId> --file <path>");
+  const { dir } = requireActiveRun(cwd);
+  let digest;
+  try {
+    digest = JSON.parse(fs.readFileSync(flags.file, "utf8"));
+  } catch (e) {
+    return fail(`cannot read digest file: ${e.message}`);
+  }
+  try {
+    recordDigest({ runDir: dir, gateId, digest });
+  } catch (e) {
+    return fail(e.message);
+  }
+  process.stdout.write(`digest rendered for gate ${gateId}\n`);
+}
+
+function cmdApprove(cwd, positional) {
+  const gateId = positional[0];
+  if (!gateId) fail("usage: jam approve <gateId>");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    recordApproval({ runDir: dir, gateId, who: "user" });
+  } catch (e) {
+    return fail(e.message);
+  }
+  process.stdout.write(`gate ${gateId} approved\n`);
+}
+
+function cmdAddGate(cwd, positional, flags) {
+  const gateId = positional[0];
+  if (!gateId || !flags.mode) fail("usage: jam add-gate <gateId> --mode <human|auto|show-and-proceed>");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    addGate({ runDir: dir, gateId, mode: flags.mode });
+  } catch (e) {
+    return fail(e.message);
+  }
+  process.stdout.write(`added gate ${gateId} (${flags.mode})\n`);
+}
+
+function cmdEvidence(cwd, positional, flags) {
+  const gateId = positional[0];
+  if (!gateId || !flags.sprint || !flags.cmd) {
+    fail('usage: jam evidence <gateId> --sprint <id> --cmd "<command>"');
+  }
+  const { dir } = requireActiveRun(cwd);
+  let result;
+  try {
+    ({ result } = recordEvidence({ runDir: dir, gateId, sprintId: flags.sprint, command: flags.cmd, cwd }));
+  } catch (e) {
+    return fail(e.message);
+  }
+  process.stdout.write(`evidence for ${gateId}: exit ${result.exitCode}\n`);
+}
+
 function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const cwd = process.cwd();
@@ -70,6 +134,14 @@ function main() {
       return cmdStart(cwd, positional, flags);
     case "status":
       return cmdStatus(cwd);
+    case "render-digest":
+      return cmdRenderDigest(cwd, positional, flags);
+    case "approve":
+      return cmdApprove(cwd, positional);
+    case "add-gate":
+      return cmdAddGate(cwd, positional, flags);
+    case "evidence":
+      return cmdEvidence(cwd, positional, flags);
     default:
       return fail(`unknown subcommand: ${sub ?? "(none)"}`);
   }
