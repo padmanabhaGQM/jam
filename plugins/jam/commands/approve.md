@@ -4,6 +4,8 @@ argument-hint: "<gate-id>"
 allowed-tools: Bash(node:*)
 ---
 
-> **Scaffold — not yet implemented.** See design spec §5, §8.
+Record your sign-off for gate `$ARGUMENTS` via the jam CLI; report output verbatim:
 
-Record approval for gate `$ARGUMENTS`. This writes the approval (who/when) into `state.json` via the deterministic helper and appends to the ledger. This is the *only* way a `human`-mode gate flips to approved — the model cannot fabricate it.
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" approve "$ARGUMENTS"
+```

@@ -126,3 +126,16 @@ test("cancel clears the active run so status reports none", () => {
   assert.notEqual(s.status, 0);
   assert.match(s.stderr + s.stdout, /no active jam run/i);
 });
+
+test("a full run can be driven end-to-end through the CLI", () => {
+  const root = tmpProject();
+  assert.equal(jam(root, ["start", "demo", "--run-id", "r1"]).status, 0);
+  const dpath = writeDigest(root);
+  assert.equal(jam(root, ["render-digest", "ALIGN", "--file", dpath]).status, 0);
+  assert.equal(jam(root, ["approve", "ALIGN"]).status, 0);
+  assert.equal(jam(root, ["add-gate", "sprint-0", "--mode", "auto"]).status, 0);
+  assert.equal(jam(root, ["evidence", "sprint-0", "--sprint", "s0", "--cmd", "exit 0"]).status, 0);
+  const status = jam(root, ["status"]).stdout;
+  assert.match(status, /ALIGN: human\/approved/);
+  assert.match(status, /sprint-0: auto\/evidence-passed/);
+});

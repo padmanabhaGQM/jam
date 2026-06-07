@@ -4,11 +4,10 @@ argument-hint: "<topic or short description of what to build>"
 allowed-tools: Bash(node:*), Read, Write, AskUserQuestion, Skill, Agent
 ---
 
-> **Scaffold — not yet implemented.** See design spec §4 (phase ALIGN) and §9.
+Run the jam CLI to start a run for: `$ARGUMENTS`
 
-Begin a jam run for: `$ARGUMENTS`
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" start "$ARGUMENTS"
+```
 
-Intended behavior:
-- Create the run dir `docs/superpowers/loop-runs/<run-id>/` and initialize `state.json`.
-- Enter **ALIGN**: research-backed brainstorm with the user (reuse `superpowers:brainstorming`); challenge the architecture via `/codex:adversarial-review`.
-- Produce `architecture.md` + `decisions.md`, render the ALIGN digest, and stop at the ALIGN gate (human sign-off by default).
+Report the CLI output verbatim. This creates the run and its ALIGN gate (pending). Live ALIGN orchestration is not wired yet (Slice 2b) — for now you drive the run with `/jam:status`, `/jam:approve`, `/jam:steer`, `/jam:cancel`.

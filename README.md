@@ -8,7 +8,7 @@
 
 The governing principle is **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — hooks, on-disk state, evidence scripts, schemas — that the models cannot talk past.
 
-> **Status: pre-alpha.** Control-surface core (state, gates, evidence, ledger, Stop-hook enforcement) is implemented and tested. Live Claude/Codex orchestration (the ALIGN/PLAN/SPRINT phases and commands) is not yet wired.
+> **Status: pre-alpha (drivable by hand).** The control surface and a `jam` CLI are implemented and tested — you can drive a full run end-to-end via the CLI / the `/jam:start|status|approve|steer|cancel` commands. Live Claude/Codex orchestration (auto digest/prompt generation, `/codex:*` delegation) is Slice 2b and not wired yet.
 
 ## What it does (when built)
 
@@ -53,6 +53,20 @@ Once installed at user level, the pairing is available in **every** project. A r
 | `/jam:dial <gate> <mode>` | Adjust how strict a gate is |
 | `/jam:resume <run-id>` | Rehydrate a run |
 | `/jam:cancel` | Kill the run |
+
+## Drive a run by hand (no LLM yet)
+
+```bash
+cd <your project>
+node ~/neel-workspace/jam/plugins/jam/scripts/jam.mjs start "try jam"
+node ~/neel-workspace/jam/plugins/jam/scripts/jam.mjs status
+# write a digest JSON with the four detectors to digest.json, then:
+node ~/neel-workspace/jam/plugins/jam/scripts/jam.mjs render-digest ALIGN --file digest.json
+node ~/neel-workspace/jam/plugins/jam/scripts/jam.mjs approve ALIGN
+node ~/neel-workspace/jam/plugins/jam/scripts/jam.mjs add-gate sprint-0 --mode auto
+node ~/neel-workspace/jam/plugins/jam/scripts/jam.mjs evidence sprint-0 --sprint s0 --cmd "npm test"
+node ~/neel-workspace/jam/plugins/jam/scripts/jam.mjs status
+```
 
 ## Design
 
