@@ -8,7 +8,7 @@
 
 The governing principle is **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — hooks, on-disk state, evidence scripts, schemas — that the models cannot talk past.
 
-> **Status: pre-alpha scaffold.** The structure is in place; the control surface is not yet implemented. Not runnable yet. See `docs` and the design spec.
+> **Status: pre-alpha.** Control-surface core (state, gates, evidence, ledger, Stop-hook enforcement) is implemented and tested. Live Claude/Codex orchestration (the ALIGN/PLAN/SPRINT phases and commands) is not yet wired.
 
 ## What it does (when built)
 
