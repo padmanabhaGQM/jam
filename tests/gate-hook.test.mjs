@@ -52,12 +52,14 @@ test("hook ALLOWS once the gate is rendered + approved", () => {
   assert.equal(r.stdout.trim(), "");
 });
 
-test("hook is fail-safe: corrupt state allows (no block)", () => {
+test("hook surfaces (blocks) a corrupt active-run state", () => {
   const root = tmpProject();
   const dir = createRun({ projectRoot: root, runId: "r1", now: "t0" });
   fs.writeFileSync(path.join(dir, "state.json"), "{ not valid json");
   const r = runHook(root);
-  assert.equal(r.stdout.trim(), "");
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.decision, "block");
+  assert.match(payload.reason, /unreadable|cancel/);
 });
 
 test("hook BLOCKS a rendered-but-not-approved human gate", () => {

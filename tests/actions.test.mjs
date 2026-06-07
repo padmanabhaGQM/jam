@@ -93,3 +93,13 @@ test("recordEvidence demotes a passed gate when a later run fails", () => {
   assert.equal(readState(dir).gates.g.status, "pending");
   assert.equal(readState(dir).gates.g.evidenceRef, null);
 });
+
+test("recordEvidence refuses non-auto (human) gates", () => {
+  const root = tmpProject();
+  const dir = createRun({ projectRoot: root, runId: "r1", now: "t0" });
+  assert.throws(
+    () => recordEvidence({ runDir: dir, gateId: "ALIGN", sprintId: "s", command: "exit 0", cwd: root, now: "t1" }),
+    /auto gates/
+  );
+  assert.equal(readState(dir).gates.ALIGN.status, "pending");
+});

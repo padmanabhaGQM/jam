@@ -35,8 +35,16 @@ function main() {
   let state;
   try {
     state = readState(runDir(cwd, runId));
-  } catch {
-    return; // unreadable/corrupt → fail-safe allow
+  } catch (err) {
+    // An ACTIVE run exists but its state is unreadable/corrupt. Do NOT silently
+    // pass an unsatisfied run — surface it and block, with an escape hatch.
+    // (Truly unexpected hook bugs still fail open via the outer catch below,
+    // so a session is never wedged by a hook malfunction.)
+    emitDecision({
+      decision: "block",
+      reason: `jam run ${runId} state is unreadable (${String(err?.message ?? err)}). Repair docs/superpowers/loop-runs/${runId}/state.json or run /jam:cancel.`
+    });
+    return;
   }
 
   const blocking = currentBlockingGate(state);

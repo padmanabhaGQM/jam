@@ -63,6 +63,9 @@ export function recordApproval({ runDir: dir, gateId, who, now }) {
 export function recordEvidence({ runDir: dir, gateId, sprintId, command, cwd, now }) {
   const state = readState(dir);
   const g = getGate(state, gateId);
+  if (g.mode !== "auto") {
+    throw new Error(`cannot record evidence for gate ${gateId}: evidence applies only to auto gates (mode=${g.mode})`);
+  }
   const result = runVerification(command, cwd);
   captureEvidence(dir, sprintId, { ...result, at: nowIso(now), gateId });
   if (result.exitCode === 0) {
