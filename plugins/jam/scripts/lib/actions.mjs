@@ -16,7 +16,6 @@ export function createRun({ projectRoot, runId, topic, now }) {
   fs.mkdirSync(dir, { recursive: true });
   const state = createInitialState({ runId, topic, now: nowIso(now) });
   writeState(dir, state);
-  fs.mkdirSync(runsRoot(projectRoot), { recursive: true });
   fs.writeFileSync(activePointerPath(projectRoot), runId);
   appendLedger(dir, { at: nowIso(now), type: "run-created", runId, topic: topic ?? "" });
   return dir;
@@ -47,7 +46,10 @@ export function recordDigest({ runDir: dir, gateId, digest, now }) {
 export function recordApproval({ runDir: dir, gateId, who, now }) {
   const state = readState(dir);
   const g = getGate(state, gateId);
-  if (g.mode === "human" && g.status !== "rendered") {
+  if (g.mode !== "human") {
+    throw new Error(`cannot approve gate ${gateId}: approval applies only to human gates (mode=${g.mode})`);
+  }
+  if (g.status !== "rendered") {
     throw new Error(`cannot approve gate ${gateId}: digest not rendered yet (status=${g.status})`);
   }
   g.status = "approved";
@@ -59,13 +61,16 @@ export function recordApproval({ runDir: dir, gateId, who, now }) {
 }
 
 export function recordEvidence({ runDir: dir, gateId, sprintId, command, cwd, now }) {
-  const result = runVerification(command, cwd);
-  captureEvidence(dir, sprintId, { ...result, at: nowIso(now), gateId });
   const state = readState(dir);
   const g = getGate(state, gateId);
+  const result = runVerification(command, cwd);
+  captureEvidence(dir, sprintId, { ...result, at: nowIso(now), gateId });
   if (result.exitCode === 0) {
     g.status = "evidence-passed";
     g.evidenceRef = `evidence/${sprintId}.json`;
+  } else if (g.status === "evidence-passed") {
+    g.status = "pending";
+    g.evidenceRef = null;
   }
   writeState(dir, state);
   appendLedger(dir, { at: nowIso(now), type: "evidence", gateId, sprintId, exitCode: result.exitCode });

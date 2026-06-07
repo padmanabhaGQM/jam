@@ -71,3 +71,25 @@ test("recordEvidence passes an auto gate ONLY on exit 0", () => {
   recordEvidence({ runDir: dir, gateId: "sprint-0-evidence", sprintId: "sprint-0", command: "exit 0", cwd: root, now: "t3" });
   assert.equal(readState(dir).gates["sprint-0-evidence"].status, "evidence-passed");
 });
+
+test("recordApproval refuses non-human (auto) gates", () => {
+  const root = tmpProject();
+  const dir = createRun({ projectRoot: root, runId: "r1", now: "t0" });
+  addGate({ runDir: dir, gateId: "sprint-0-evidence", mode: "auto", now: "t1" });
+  assert.throws(
+    () => recordApproval({ runDir: dir, gateId: "sprint-0-evidence", now: "t2" }),
+    /human gates/
+  );
+  assert.equal(readState(dir).gates["sprint-0-evidence"].status, "pending");
+});
+
+test("recordEvidence demotes a passed gate when a later run fails", () => {
+  const root = tmpProject();
+  const dir = createRun({ projectRoot: root, runId: "r1", now: "t0" });
+  addGate({ runDir: dir, gateId: "g", mode: "auto", now: "t1" });
+  recordEvidence({ runDir: dir, gateId: "g", sprintId: "s", command: "exit 0", cwd: root, now: "t2" });
+  assert.equal(readState(dir).gates.g.status, "evidence-passed");
+  recordEvidence({ runDir: dir, gateId: "g", sprintId: "s", command: "exit 1", cwd: root, now: "t3" });
+  assert.equal(readState(dir).gates.g.status, "pending");
+  assert.equal(readState(dir).gates.g.evidenceRef, null);
+});
