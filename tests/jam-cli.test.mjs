@@ -107,3 +107,22 @@ test("add-gate then evidence passes an auto gate only on exit 0", () => {
   jam(root, ["evidence", "sprint-0", "--sprint", "s0", "--cmd", "exit 0"]);
   assert.match(jam(root, ["status"]).stdout, /sprint-0: auto\/evidence-passed/);
 });
+
+test("steer records a durable directive shown in status", () => {
+  const root = tmpProject();
+  jam(root, ["start", "x", "--run-id", "r1"]);
+  const r = jam(root, ["steer", "stay within the existing module boundaries"]);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /d1/);
+  assert.match(jam(root, ["status"]).stdout, /active directives: d1/);
+});
+
+test("cancel clears the active run so status reports none", () => {
+  const root = tmpProject();
+  jam(root, ["start", "x", "--run-id", "r1"]);
+  const r = jam(root, ["cancel"]);
+  assert.equal(r.status, 0);
+  const s = jam(root, ["status"]);
+  assert.notEqual(s.status, 0);
+  assert.match(s.stderr + s.stdout, /no active jam run/i);
+});

@@ -9,6 +9,7 @@ import fs from "node:fs";
 import { readActiveRunId, runDir } from "./lib/paths.mjs";
 import { readState } from "./lib/state.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
+import { addSteering, cancelRun } from "./lib/control.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -124,6 +125,20 @@ function cmdEvidence(cwd, positional, flags) {
   process.stdout.write(`evidence for ${gateId}: exit ${result.exitCode}\n`);
 }
 
+function cmdSteer(cwd, positional) {
+  const text = positional.join(" ").trim();
+  if (!text) fail("usage: jam steer <redirection text>");
+  const { dir } = requireActiveRun(cwd);
+  const d = addSteering({ runDir: dir, text });
+  process.stdout.write(`recorded steering directive ${d.id}\n`);
+}
+
+function cmdCancel(cwd) {
+  const { dir } = requireActiveRun(cwd);
+  cancelRun({ projectRoot: cwd, runDir: dir });
+  process.stdout.write("jam run cancelled\n");
+}
+
 function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const cwd = process.cwd();
@@ -142,6 +157,10 @@ function main() {
       return cmdAddGate(cwd, positional, flags);
     case "evidence":
       return cmdEvidence(cwd, positional, flags);
+    case "steer":
+      return cmdSteer(cwd, positional);
+    case "cancel":
+      return cmdCancel(cwd);
     default:
       return fail(`unknown subcommand: ${sub ?? "(none)"}`);
   }
