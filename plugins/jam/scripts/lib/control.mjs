@@ -18,3 +18,10 @@ export function addSteering({ runDir: dir, text, context, now }) {
   appendLedger(dir, { at: directive.createdAt, type: "steering", id, text });
   return directive;
 }
+
+export function cancelRun({ projectRoot, runDir: dir, now }) {
+  const p = activePointerPath(projectRoot);
+  if (fs.existsSync(p)) fs.rmSync(p);
+  appendLedger(dir, { at: nowIso(now), type: "cancelled" });
+  return true;
+}
