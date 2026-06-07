@@ -4,6 +4,8 @@ argument-hint: "[run-id]"
 allowed-tools: Bash(node:*)
 ---
 
-> **Scaffold — not yet implemented.** See design spec §5.
+Cancel the active jam run via the jam CLI; report output verbatim:
 
-Halt run `$ARGUMENTS` (or the active run): mark it cancelled in `state.json` + ledger and cancel any in-flight Codex job via `/codex:cancel`. The kill switch — always available.
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" cancel
+```
