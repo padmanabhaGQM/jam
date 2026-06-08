@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createInitialState, validateState, addGate, readState, writeState } from "../plugins/jam/scripts/lib/state.mjs";
 import { advancePhase } from "../plugins/jam/scripts/lib/phases.mjs";
-import { createRun, recordDigest } from "../plugins/jam/scripts/lib/actions.mjs";
+import { createRun, recordDigest, recordApproval } from "../plugins/jam/scripts/lib/actions.mjs";
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), "jam-pgb-")); }
 function digest() {
@@ -42,4 +42,11 @@ test("recordDigest applies ONLY to rendered-bound gates", () => {
   assert.throws(() => recordDigest({ runDir: dir, gateId: "V", digest: digest() }), /not a digest/);
   recordDigest({ runDir: dir, gateId: "DIAGNOSE", digest: digest() });
   assert.equal(readState(dir).gates.DIAGNOSE.status, "rendered");
+});
+
+test("approving a planned gate before a plan reports 'plan not recorded'", () => {
+  const root = tmp();
+  const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
+  const s = readState(dir); addGate(s, "PLAN", "human", "planned"); writeState(dir, s);
+  assert.throws(() => recordApproval({ runDir: dir, gateId: "PLAN" }), /plan not recorded/);
 });

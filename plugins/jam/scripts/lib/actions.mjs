@@ -55,7 +55,7 @@ export function recordApproval({ runDir: dir, gateId, who, now }) {
   }
   const need = g.approveFrom ?? "rendered";
   if (g.status !== need) {
-    const what = need === "verified" ? "not verified yet" : "digest not rendered yet";
+    const what = need === "verified" ? "not verified yet" : need === "planned" ? "plan not recorded yet" : "digest not rendered yet";
     throw new Error(`cannot approve gate ${gateId}: ${what} (status=${g.status}, needs ${need})`);
   }
   g.status = "approved";
