@@ -57,3 +57,13 @@ test("verify with surviving blockers does not advance; clean verdict + approve d
   assert.equal(jam(root, ["advance"]).status, 0);
   assert.match(jam(root, ["status"]).stdout, /phase PLAN/);
 });
+
+test("diagnose with a whitespace-only goal file errors and creates no run", () => {
+  const root = tmp();
+  const gp = path.join(root, "blank.txt"); fs.writeFileSync(gp, "   \n");
+  const r = jam(root, ["diagnose", "x", "--goal", gp, "--run-id", "r1"]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /empty/);
+  // no active run was created
+  assert.notEqual(jam(root, ["status"]).status, 0);
+});

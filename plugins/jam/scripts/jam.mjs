@@ -144,19 +144,23 @@ function cmdCancel(cwd) {
 
 function cmdDiagnose(cwd, positional, flags) {
   const topic = positional.join(" ").trim();
-  if (!topic) fail("usage: jam diagnose <topic> --goal <file>");
+  if (!topic) fail("usage: jam diagnose <topic> --goal <file>  (or --goal-codex <goalId>)");
   let text, source;
   if (flags.goal) {
     try { text = fs.readFileSync(flags.goal, "utf8"); source = `file:${flags.goal}`; }
     catch (e) { return fail(`cannot read goal file: ${e.message}`); }
   } else if (flags["goal-codex"]) {
     const r = spawnSync("python3", ["-c",
-      "import sqlite3,sys;c=sqlite3.connect('"+process.env.HOME+"/.codex/goals_1.sqlite');"+
+      "import sqlite3,sys,os;c=sqlite3.connect(os.path.join(os.path.expanduser('~'),'.codex','goals_1.sqlite'));"+
       "r=c.execute('select objective from thread_goals where goal_id=?',(sys.argv[1],)).fetchone();"+
       "print(r[0] if r else '')", flags["goal-codex"]], { encoding: "utf8" });
     text = (r.stdout || "").trim(); source = `codex:${flags["goal-codex"]}`;
-    if (!text) return fail("could not read that Codex goal id; use --goal <file> instead");
-  } else { return fail("usage: jam diagnose <topic> --goal <file>  (or --goal-codex <goalId>)"); }
+  } else {
+    return fail("usage: jam diagnose <topic> --goal <file>  (or --goal-codex <goalId>)");
+  }
+  if (!text || !text.trim()) {
+    return fail("goal is empty; provide a non-empty --goal <file> or a valid --goal-codex <goalId>");
+  }
   const runId = flags["run-id"] || genRunId();
   createRun({ projectRoot: cwd, runId, topic, mode: "repair" });
   setGoal({ runDir: runDir(cwd, runId), text, source });
