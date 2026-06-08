@@ -11,13 +11,13 @@ function nowIso(now) {
   return now ?? new Date().toISOString();
 }
 
-export function createRun({ projectRoot, runId, topic, now }) {
+export function createRun({ projectRoot, runId, topic, now, mode }) {
   const dir = runDir(projectRoot, runId);
   fs.mkdirSync(dir, { recursive: true });
-  const state = createInitialState({ runId, topic, now: nowIso(now) });
+  const state = createInitialState({ runId, topic, now: nowIso(now), mode });
   writeState(dir, state);
   fs.writeFileSync(activePointerPath(projectRoot), runId);
-  appendLedger(dir, { at: nowIso(now), type: "run-created", runId, topic: topic ?? "" });
+  appendLedger(dir, { at: nowIso(now), type: "run-created", runId, topic: topic ?? "", mode: mode ?? "greenfield" });
   return dir;
 }
 
