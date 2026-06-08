@@ -17,6 +17,7 @@ import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from
 import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { advanceRun } from "./lib/phases.mjs";
+import { recordPlan } from "./lib/plan.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -71,6 +72,10 @@ function cmdStatus(cwd) {
   const active = state.steeringDirectives.filter((d) => d.status === "active");
   if (active.length) {
     lines.push(`  active directives: ${active.map((d) => d.id).join(", ")}`);
+  }
+  if (state.plan) {
+    lines.push(`  verify: ${state.plan.verifyCmd}`);
+    for (const sp of state.plan.sprints) lines.push(`  sprint ${sp.id}: ${sp.status} — ${sp.title}`);
   }
   process.stdout.write(lines.join("\n") + "\n");
 }
@@ -236,6 +241,16 @@ function cmdCodexStatus(cwd, positional, flags) {
   process.stdout.write(`turn: ${status}\nsession: ${sessionId ?? "(none)"}\ntranscript: ${transcript ?? "(not found)"}\n`);
 }
 
+function cmdPlan(cwd, positional, flags) {
+  if (!flags.file) fail("usage: jam plan --file <plan.json>");
+  const { dir } = requireActiveRun(cwd);
+  let plan;
+  try { plan = JSON.parse(fs.readFileSync(flags.file, "utf8")); } catch (e) { return fail(`cannot read plan file: ${e.message}`); }
+  let state;
+  try { state = recordPlan({ runDir: dir, plan }); } catch (e) { return fail(e.message); }
+  process.stdout.write(`plan recorded: ${state.plan.sprints.length} sprint(s); verify: ${state.plan.verifyCmd}\n`);
+}
+
 async function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const cwd = process.cwd();
@@ -270,6 +285,8 @@ async function main() {
       return cmdCodexResume(cwd, positional, flags);
     case "codex-status":
       return cmdCodexStatus(cwd, positional, flags);
+    case "plan":
+      return cmdPlan(cwd, positional, flags);
     default:
       return fail(`unknown subcommand: ${sub ?? "(none)"}`);
   }
