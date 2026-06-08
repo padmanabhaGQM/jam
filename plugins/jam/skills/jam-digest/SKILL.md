@@ -16,7 +16,7 @@ Validates a digest object against the four-detector contract. Returns `{ valid: 
 |---|---|
 | **1. Trace to architecture** | `traceToArchitecture.componentsTouched` (string[]) |
 | **2. Decision register** | `decisions[]` each with `choice`, `alternatives[]`, `why` |
-| **3. Global project map** | `globalMap.mermaid` (string), `globalMap.currentPosition` (string), `globalMap.isLocallyScopedRisk` (boolean) |
+| **3. Global project map** | `globalMap.mermaid` (string), `globalMap.isLocallyScopedRisk` (boolean); `currentPosition` is rendered but not validation-enforced |
 | **4. Coverage delta** | `coverage.addressed` (string[]), `coverage.dropped` (string[]) |
 | **Summary** | `summary` (string) |
 
@@ -33,7 +33,7 @@ Renders the digest as Markdown with Mermaid to the terminal. Sections:
 ## Usage pattern
 
 ```js
-import { validateDigest, renderDigest } from "./lib/digest.mjs";
+import { validateDigest, renderDigest } from "./scripts/lib/digest.mjs";
 
 const result = validateDigest(digest);
 if (!result.valid) throw new Error(result.errors.join("; "));

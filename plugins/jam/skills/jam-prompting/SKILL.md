@@ -25,7 +25,7 @@ Produces the prompt for the VERIFY adversarial pass (`/codex:adversarial-review`
 ## Usage pattern
 
 ```js
-import { buildGroundingPrompt, buildAdversarialPrompt } from "./lib/prompting.mjs";
+import { buildGroundingPrompt, buildAdversarialPrompt } from "./scripts/lib/prompting.mjs";
 
 // DIAGNOSE pass — feed to /codex:rescue --background
 const groundingText = buildGroundingPrompt({ goal, repoFacts, directives });
