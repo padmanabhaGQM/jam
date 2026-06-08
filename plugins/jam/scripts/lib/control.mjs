@@ -1,6 +1,7 @@
 import fs from "node:fs";
+import path from "node:path";
 
-import { readState, writeState } from "./state.mjs";
+import { readState, writeState, getGate } from "./state.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { activePointerPath } from "./paths.mjs";
 
@@ -24,4 +25,19 @@ export function cancelRun({ projectRoot, runDir: dir, now }) {
   if (fs.existsSync(p)) fs.rmSync(p);
   appendLedger(dir, { at: nowIso(now), type: "cancelled" });
   return true;
+}
+
+export function recordVerification({ runDir: dir, gateId, verdict, now }) {
+  const state = readState(dir);
+  const g = getGate(state, gateId);
+  const verDir = path.join(dir, "verifications");
+  fs.mkdirSync(verDir, { recursive: true });
+  fs.writeFileSync(path.join(verDir, `${gateId}.json`), JSON.stringify(verdict ?? {}, null, 2));
+  const blockers = typeof verdict?.unresolvedBlockers === "number"
+    ? verdict.unresolvedBlockers
+    : (Array.isArray(verdict?.findings) ? verdict.findings.filter((f) => f.severity === "blocker").length : 0);
+  if (blockers === 0) g.status = "verified";
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "verification", gateId, blockers });
+  return { state, blockers };
 }

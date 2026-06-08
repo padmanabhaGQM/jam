@@ -49,8 +49,8 @@ export function recordApproval({ runDir: dir, gateId, who, now }) {
   if (g.mode !== "human") {
     throw new Error(`cannot approve gate ${gateId}: approval applies only to human gates (mode=${g.mode})`);
   }
-  if (g.status !== "rendered") {
-    throw new Error(`cannot approve gate ${gateId}: digest not rendered yet (status=${g.status})`);
+  if (!["rendered", "verified"].includes(g.status)) {
+    throw new Error(`cannot approve gate ${gateId}: digest not rendered / not verified yet (status=${g.status})`);
   }
   g.status = "approved";
   g.approvedBy = who ?? "user";
