@@ -34,7 +34,8 @@ export function recordVerification({ runDir: dir, gateId, verdict, now }) {
     throw new Error(`cannot record verification for gate ${gateId}: verification applies only to human gates (mode=${g.mode})`);
   }
   if (g.approveFrom !== "verified") {
-    throw new Error(`cannot record verification for gate ${gateId}: this gate is satisfied by a digest, not a verdict`);
+    const got = g.approveFrom === "rendered" ? "digest" : "plan";
+    throw new Error(`cannot record verification for gate ${gateId}: it is satisfied by a ${got}, not a verdict`);
   }
   const hasCount = typeof verdict?.unresolvedBlockers === "number";
   const hasFindings = Array.isArray(verdict?.findings);

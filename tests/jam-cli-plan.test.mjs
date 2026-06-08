@@ -40,6 +40,7 @@ test("jam plan records a valid plan; status shows verify + sprints", () => {
 test("PLAN gate cannot be satisfied by a digest, a verdict, or early approval", () => {
   const root = tmp();
   toPlan(root);
+  assert.match(jam(root, ["status"]).stdout, /phase PLAN/);
   assert.notEqual(jam(root, ["render-digest", "PLAN", "--file", writeJSON(path.join(root, "d2.json"), digestObj())]).status, 0);
   assert.notEqual(jam(root, ["verify", "--file", writeJSON(path.join(root, "v2.json"), { unresolvedBlockers: 0 })]).status, 0);
   assert.notEqual(jam(root, ["approve", "PLAN"]).status, 0);

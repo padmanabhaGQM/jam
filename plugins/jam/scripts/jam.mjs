@@ -242,7 +242,7 @@ function cmdCodexStatus(cwd, positional, flags) {
 }
 
 function cmdPlan(cwd, positional, flags) {
-  if (!flags.file) fail("usage: jam plan --file <plan.json>");
+  if (!flags.file) return fail("usage: jam plan --file <plan.json>");
   const { dir } = requireActiveRun(cwd);
   let plan;
   try { plan = JSON.parse(fs.readFileSync(flags.file, "utf8")); } catch (e) { return fail(`cannot read plan file: ${e.message}`); }
