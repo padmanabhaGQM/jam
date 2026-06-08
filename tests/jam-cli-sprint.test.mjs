@@ -47,3 +47,11 @@ test("a failing verifyCmd blocks done and advance", () => {
   assert.notEqual(jam(root, ["advance"]).status, 0);                      // not all sprints done
   assert.match(jam(root, ["status"]).stdout, /phase IMPLEMENT/);
 });
+
+test("jam sprint with no action flag fails with usage", () => {
+  const root = tmp();
+  toImplement(root, "true");
+  const r = jam(root, ["sprint", "fix-1"]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /usage: jam sprint/);
+});
