@@ -5,7 +5,7 @@ description: Use to run a jam repair-mode loop — the gated DIAGNOSE→VERIFY p
 
 # jam orchestrator — DIAGNOSE → VERIFY
 
-You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the brain** (root-cause analysis, digest assembly, gate management); **Codex is the independent adversary/grounder** (parallel diagnosis via `/codex:rescue`, adversarial refutation via `/codex:adversarial-review`); **the user supervises and approves each gate.**
+You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the brain** (root-cause analysis, digest assembly, gate management); **Codex is the independent adversary/grounder** (parallel diagnosis via jam's own codex engine, adversarial refutation via `/codex:adversarial-review`); **the user supervises and approves each gate.**
 
 ## Non-negotiables
 
@@ -34,11 +34,27 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
    Invoke `superpowers:systematic-debugging`. Do NOT propose fixes yet. Ground the analysis in concrete repo evidence: source code, validators, the latest `validation_report*` files, logs, the cost ledger — all weighed against the acceptance goal. Identify root causes that are **global and structural**, not local-pass/global-break patches.
 
 3. **Codex: independent grounding pass.**
-   Delegate an independent diagnosis to Codex, running in background:
-   ```
-   /codex:rescue --background
-   ```
-   Pass the full text produced by `buildGroundingPrompt({ goal, repoFacts, directives })` from `lib/prompting.mjs` as the prompt. Codex is instructed by that prompt to use its own `superpowers:systematic-debugging` and to deliver: a global state-map, root cause(s), and a prioritized fix-plan tagged global-structural vs local-patch. See the **Codex-hang protocol** below if the job does not complete.
+   Delegate an independent diagnosis to Codex via jam's own codex engine — **not** `/codex:rescue`. Concretely:
+
+   a. Write the full text produced by `buildGroundingPrompt({ goal, repoFacts, directives })` from `lib/prompting.mjs` to a file (e.g. `<run>/codex/diagnose/prompt.md`).
+
+   b. Start the turn:
+      ```bash
+      node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" codex-run \
+        --prompt-file <run>/codex/diagnose/prompt.md \
+        --timeout 300000 \
+        --out-dir <run>/codex/diagnose
+      ```
+      The command prints `status: completed|timed_out`, `session: <id>`, and `out-dir: <dir>`. On completion it also prints `message:` — that is Codex's grounding result.
+
+   c. Read the printed `message:` as Codex's grounding result. If you need to continue the thread (e.g. to ask a follow-up), use:
+      ```bash
+      node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" codex-resume <sessionId> \
+        --prompt-file <reply.md> \
+        --out-dir <run>/codex/diagnose
+      ```
+
+   Codex is instructed by `buildGroundingPrompt` to use its own `superpowers:systematic-debugging` and to deliver: a global state-map, root cause(s), and a prioritized fix-plan tagged global-structural vs local-patch. See the **Codex-hang protocol** below if the turn times out.
 
 4. **Reconcile and build the 4-detector digest.**
    Merge Claude's findings with Codex's result into a single digest JSON that contains **all four detectors**:
@@ -84,7 +100,7 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
    ```
    /codex:adversarial-review --background
    ```
-   Pass the full text produced by `buildAdversarialPrompt({ diagnosis, goal })` from `lib/prompting.mjs`. Codex is instructed to **REFUTE the diagnosis against the source** — not nitpick wording, but find: incorrect root causes, missed failure modes, global fixes dressed as local patches. See the **Codex-hang protocol** if the job stalls.
+   Pass the full text produced by `buildAdversarialPrompt({ diagnosis, goal })` from `lib/prompting.mjs`. Codex is instructed to **REFUTE the diagnosis against the source** — not nitpick wording, but find: incorrect root causes, missed failure modes, global fixes dressed as local patches. See the **Codex-hang protocol** if the job stalls. (`/codex:adversarial-review` is read-only and retained here; M1 moved only the delegation/authoring lane — the grounding pass — to the jam engine.)
 
 4. **Record the verdict.**
    Capture the verdict as a JSON file. It must carry `unresolvedBlockers` (integer) or `findings[]`. Record it:
@@ -111,14 +127,26 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
 
 ## Codex-hang protocol (REQUIRED)
 
-Codex `/rescue` has hung in practice. Always follow this protocol:
+Codex turns can time out in practice. jam's engine **never kills** a Codex process; neither do you. Always follow this protocol:
 
-- Run all Codex work with `--background` and poll with `/codex:status`.
-- If a job has not returned within a reasonable timeout (e.g. 5 minutes for grounding, 3 minutes for adversarial review), **do not block the loop**:
-  - For the grounding pass: fall back to Claude-only analysis; note the hang in the digest's `decisions[]` as a process decision.
-  - For the adversarial pass: fall back to `/codex:adversarial-review` (synchronous, shorter scope); note the fallback in the verdict.
-- Surface the hang to the user so they can decide whether to cancel (`/codex:cancel`) or wait.
-- **Never kill Codex processes** — use `/codex:cancel` only if the user explicitly requests it.
+**Grounding pass (`codex-run` reports `status: timed_out`):**
+- The Codex process **may still be running**. Do NOT kill it — not now, not as a cleanup step.
+- Surface the situation to the user immediately: report the `session:` id printed by `codex-run` and the `out-dir`.
+- Keep the session id. You can resume the turn later:
+  ```bash
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" codex-resume <sessionId> \
+    --prompt-file <reply.md> \
+    --out-dir <run>/codex/diagnose
+  ```
+- If you cannot wait (user wants to proceed), fall back to Claude-only analysis for the grounding pass and note the timeout in the digest's `decisions[]` as a process decision.
+- Any cancellation is the user's responsibility via `/codex:cancel` or a manual kill — you must not initiate it.
+
+**Adversarial pass (`/codex:adversarial-review` stalls):**
+- Same never-kill rule applies. Surface it to the user; note the fallback in the verdict.
+- You may fall back to a tighter `/codex:adversarial-review` scope; note the fallback in the verdict.
+
+**Before answering after any pause, timeout, or resume:**
+Run `jam codex-status --event-log <run>/codex/<step>/events.jsonl` to read the live turn, and reconcile (`reconcile` in `lib/codex/reconcile.mjs`) the live question against your local pending one. Answer the **live thread** — never from stale memory of what you thought the session state was.
 
 ---
 
