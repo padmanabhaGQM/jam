@@ -11,7 +11,7 @@
     {
       "name": "jam",
       "description": "Honest, controlled Claude–Codex build loop. Claude is the brain (architect/planner/reviewer), Codex is the hands (implementer), enforced by a deterministic control surface.",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "author": {
         "name": "Padmanabha Banerjee (Neel)"
       },
