@@ -52,3 +52,22 @@ test("hang fake -> codexWait times out; the engine never kills", async () => {
   assert.equal(r.status, "timed_out");
   try { process.kill(pid); } catch {} // TEST cleanup of the detached fake — NOT done by the engine
 });
+
+test("codexResume against fake-codex completes (resume path)", async () => {
+  const dir = tmp();
+  const eventLog = path.join(dir, "e.jsonl");
+  const lastMsg = path.join(dir, "l.md");
+  codexResume({ sessionId: "resume-sid", prompt: "reply", codexBin: FAKE, eventLog, lastMsg });
+  const r = await codexWait({ eventLog, lastMsg, timeoutMs: 5000, pollMs: 30 });
+  assert.equal(r.status, "completed");
+  assert.equal(r.sessionId, "resume-sid");
+});
+
+test("a bad codex binary does not crash; the turn times out", async () => {
+  const dir = tmp();
+  const eventLog = path.join(dir, "e.jsonl");
+  const lastMsg = path.join(dir, "l.md");
+  assert.doesNotThrow(() => codexStart({ prompt: "x", cwd: dir, codexBin: "/nonexistent/jam-codex", eventLog, lastMsg }));
+  const r = await codexWait({ eventLog, lastMsg, timeoutMs: 300, pollMs: 30 });
+  assert.equal(r.status, "timed_out");
+});

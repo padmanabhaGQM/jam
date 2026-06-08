@@ -9,8 +9,17 @@ function spawnDetached(bin, args, { prompt, eventLog }) {
   fs.mkdirSync(path.dirname(eventLog), { recursive: true });
   const out = fs.openSync(eventLog, "a");
   const child = spawn(bin, args, { detached: true, stdio: ["pipe", out, out] });
-  if (prompt != null) child.stdin.write(prompt);
-  child.stdin.end(); // ALWAYS close stdin so a `-` reader gets EOF (avoid deadlock)
+  // A bad/missing binary (e.g. misconfigured JAM_CODEX_BIN) emits 'error' asynchronously.
+  // Swallow it with a breadcrumb so the CLI never crashes; codexWait will simply time out.
+  // (Never kill: we attach handlers, we do not terminate anything.)
+  child.on("error", (e) => {
+    try { fs.appendFileSync(eventLog, JSON.stringify({ type: "spawn.error", message: String(e && e.message) }) + "\n"); } catch {}
+  });
+  if (child.stdin) {
+    child.stdin.on("error", () => {});
+    if (prompt != null) child.stdin.write(prompt);
+    child.stdin.end();
+  }
   child.unref();
   fs.closeSync(out);
   return { pid: child.pid, eventLog };
@@ -34,7 +43,15 @@ export async function codexWait({ eventLog, lastMsg, timeoutMs = 120000, pollMs 
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     if (hasTurnCompleted(eventLog)) {
-      return { status: "completed", sessionId: sessionIdFromEventLog(eventLog), lastMessage: readLast(lastMsg) };
+      // turn.completed may be flushed slightly before the -o last-message file with a real
+      // codex binary; give the file a brief grace window before returning.
+      let lastMessage = readLast(lastMsg);
+      const graceUntil = Date.now() + Math.max(pollMs * 3, 300);
+      while (lastMessage == null && Date.now() < graceUntil) {
+        await new Promise((r) => setTimeout(r, pollMs));
+        lastMessage = readLast(lastMsg);
+      }
+      return { status: "completed", sessionId: sessionIdFromEventLog(eventLog), lastMessage };
     }
     if (Date.now() >= deadline) {
       return { status: "timed_out", sessionId: sessionIdFromEventLog(eventLog) };
