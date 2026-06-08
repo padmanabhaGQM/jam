@@ -8,7 +8,7 @@
 
 The governing principle is **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — hooks, on-disk state, evidence scripts, schemas — that the models cannot talk past.
 
-> **Status: pre-alpha (orchestrated diagnosis + owned Codex transport).** jam drives Codex through its own recoverable `codex exec`/`resume` engine (`jam codex-run|codex-resume|codex-status`) — captures session id + transcript, times out without ever killing Codex, and reconciles the live thread before answering. The gated DIAGNOSE→VERIFY loop uses it. PLAN→IMPLEMENT + verify.sh are next.
+> **Status: pre-alpha (orchestrated diagnose → verify → plan).** jam runs a gated DIAGNOSE→VERIFY→PLAN repair loop over its own recoverable Codex engine: it diagnoses (root-cause), adversarially verifies, then produces a gated, sprint-decomposed plan with a registered global `verifyCmd`. The IMPLEMENT loop (Codex builds each sprint, gated by verify.sh) is next.
 
 ## What it does (when built)
 
@@ -72,6 +72,15 @@ jam render-digest DIAGNOSE --file diag.json && jam approve DIAGNOSE && jam advan
 # orchestrator: verification-before-completion + /codex:adversarial-review (refute vs source)
 jam verify --file verdict.json   # verified only if no blockers survive
 jam approve VERIFY && jam advance   # → PLAN (2b-2)
+```
+
+## Plan phase
+
+```bash
+jam advance                       # VERIFY → PLAN (after approve VERIFY)
+# author plan.json: { "verifyCmd": "bash verify.sh", "sprints": [ {"id":"fix-1","title":"...","acceptanceCriteria":"..."} ] }
+jam plan --file plan.json         # validates + gates; the PLAN gate accepts ONLY a valid plan (not a digest/verdict)
+jam approve PLAN && jam advance    # → IMPLEMENT (next slice)
 ```
 
 ## Drive a run by hand (no LLM yet)
