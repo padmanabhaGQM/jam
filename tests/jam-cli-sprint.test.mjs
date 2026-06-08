@@ -42,6 +42,7 @@ test("a failing verifyCmd blocks done and advance", () => {
   toImplement(root, "false");
   jam(root, ["sprint", "fix-1", "--start"]);
   const v = jam(root, ["sprint", "fix-1", "--verify"]);
+  assert.equal(v.status, 0);
   assert.match(v.stdout, /exit 1/);
   assert.notEqual(jam(root, ["sprint", "fix-1", "--done"]).status, 0);   // not verified
   assert.notEqual(jam(root, ["advance"]).status, 0);                      // not all sprints done
@@ -54,4 +55,16 @@ test("jam sprint with no action flag fails with usage", () => {
   const r = jam(root, ["sprint", "fix-1"]);
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /usage: jam sprint/);
+});
+
+test("jam evidence cannot bypass a plan sprint's global verifyCmd gate", () => {
+  const root = tmp();
+  toImplement(root, "false");                 // global verifyCmd fails
+  jam(root, ["sprint", "fix-1", "--start"]);
+  // try to pass the sprint gate with an arbitrary always-true command
+  const ev = jam(root, ["evidence", "sprint-fix-1", "--sprint", "fix-1", "--cmd", "true"]);
+  assert.notEqual(ev.status, 0);                                        // refused
+  assert.match(ev.stderr, /plan sprint/);
+  assert.notEqual(jam(root, ["sprint", "fix-1", "--done"]).status, 0);  // still cannot finish
+  assert.match(jam(root, ["status"]).stdout, /phase IMPLEMENT/);
 });
