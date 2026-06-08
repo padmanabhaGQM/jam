@@ -5,9 +5,13 @@
  */
 import process from "node:process";
 import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { spawnSync } from "node:child_process";
 
 import { readActiveRunId, runDir } from "./lib/paths.mjs";
+import { codexStart, codexResume, codexWait } from "./lib/codex/exec.mjs";
+import { classifyTurn, sessionIdFromEventLog, locateTranscript } from "./lib/codex/session.mjs";
 import { readState } from "./lib/state.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
 import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
@@ -190,7 +194,49 @@ function cmdAdvance(cwd) {
   process.stdout.write(`advanced to phase ${state.phase}\n`);
 }
 
-function main() {
+async function cmdCodexRun(cwd, positional, flags) {
+  if (!flags["prompt-file"]) fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>]");
+  let prompt;
+  try { prompt = fs.readFileSync(flags["prompt-file"], "utf8"); } catch (e) { return fail(`cannot read prompt file: ${e.message}`); }
+  const outDir = flags["out-dir"] || fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
+  fs.mkdirSync(outDir, { recursive: true });
+  const eventLog = path.join(outDir, "events.jsonl");
+  const lastMsg = path.join(outDir, "last.md");
+  codexStart({ prompt, cwd: flags.cwd || cwd, eventLog, lastMsg });
+  const timeoutMs = flags.timeout ? Number(flags.timeout) : 120000;
+  const r = await codexWait({ eventLog, lastMsg, timeoutMs });
+  process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? "(none)"}\n`);
+  if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
+  else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). Resume with: jam codex-resume ${r.sessionId ?? "<id>"} --prompt-file <reply>\n`);
+}
+
+async function cmdCodexResume(cwd, positional, flags) {
+  const sessionId = positional[0];
+  if (!sessionId || !flags["prompt-file"]) fail("usage: jam codex-resume <sessionId> --prompt-file <f> [--timeout <ms>] [--out-dir <dir>]");
+  let prompt;
+  try { prompt = fs.readFileSync(flags["prompt-file"], "utf8"); } catch (e) { return fail(`cannot read prompt file: ${e.message}`); }
+  const outDir = flags["out-dir"] || fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
+  fs.mkdirSync(outDir, { recursive: true });
+  const eventLog = path.join(outDir, "events.jsonl");
+  const lastMsg = path.join(outDir, "last.md");
+  codexResume({ sessionId, prompt, eventLog, lastMsg });
+  const timeoutMs = flags.timeout ? Number(flags.timeout) : 120000;
+  const r = await codexWait({ eventLog, lastMsg, timeoutMs });
+  process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? sessionId}\n`);
+  if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
+  else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed).\n`);
+}
+
+function cmdCodexStatus(cwd, positional, flags) {
+  if (!flags["event-log"]) fail("usage: jam codex-status --event-log <events.jsonl>");
+  const eventLog = flags["event-log"];
+  const status = classifyTurn({ eventLog });
+  const sessionId = sessionIdFromEventLog(eventLog);
+  const transcript = sessionId ? locateTranscript(sessionId) : null;
+  process.stdout.write(`turn: ${status}\nsession: ${sessionId ?? "(none)"}\ntranscript: ${transcript ?? "(not found)"}\n`);
+}
+
+async function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const cwd = process.cwd();
   const { positional, flags } = parseFlags(rest);
@@ -218,9 +264,15 @@ function main() {
       return cmdVerify(cwd, positional, flags);
     case "advance":
       return cmdAdvance(cwd);
+    case "codex-run":
+      return cmdCodexRun(cwd, positional, flags);
+    case "codex-resume":
+      return cmdCodexResume(cwd, positional, flags);
+    case "codex-status":
+      return cmdCodexStatus(cwd, positional, flags);
     default:
       return fail(`unknown subcommand: ${sub ?? "(none)"}`);
   }
 }
 
-main();
+main().catch((e) => fail(e && e.message ? e.message : String(e)));
