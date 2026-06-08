@@ -42,4 +42,4 @@ Any active steering directive recorded via `jam steer` is passed in the `directi
 
 ## Sprint prompts (future)
 
-For PLAN/IMPLEMENT sprint prompts (Slice 2b-2), the same principles apply: state exact scope + acceptance criteria from `plan.md`, instruct Codex to use TDD superpowers skills, carry active directives, and demand exact evidence back (commands run, exit codes, diff, test output). A `buildSprintPrompt` function will be added to `lib/prompting.mjs` in that slice.
+For IMPLEMENT sprint prompts, the same principles apply: `buildSprintPrompt({ sprint, goal, directives })` in `lib/prompting.mjs` states the sprint's scope + acceptance criteria, instructs Codex to use its TDD superpowers skill, carries active directives, and demands exact evidence back (commands run, exit codes, diff, test output).

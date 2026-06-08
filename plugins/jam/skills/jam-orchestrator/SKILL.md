@@ -120,7 +120,7 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
    Once `jam verify` confirms no blockers:
    ```
    /jam:approve VERIFY
-   jam advance   # → PLAN (Slice 2b-2 boundary; stop here)
+   jam advance   # → PLAN
    ```
 
 ---

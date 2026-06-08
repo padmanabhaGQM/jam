@@ -71,7 +71,7 @@ jam diagnose "fix the global story spine" --goal goal.md
 jam render-digest DIAGNOSE --file diag.json && jam approve DIAGNOSE && jam advance   # → VERIFY
 # orchestrator: verification-before-completion + /codex:adversarial-review (refute vs source)
 jam verify --file verdict.json   # verified only if no blockers survive
-jam approve VERIFY && jam advance   # → PLAN (2b-2)
+jam approve VERIFY && jam advance   # → PLAN
 ```
 
 ## Plan phase
