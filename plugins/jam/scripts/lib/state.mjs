@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
-const VALID_STATUSES = ["pending", "rendered", "verified", "evidence-passed", "approved", "rejected"];
+const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected"];
 
 export function createInitialState({ runId, topic, now, mode }) {
   if (!runId) throw new Error("createInitialState: runId required");

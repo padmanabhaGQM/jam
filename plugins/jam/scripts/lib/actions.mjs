@@ -34,8 +34,9 @@ export function recordDigest({ runDir: dir, gateId, digest, now }) {
   if (!valid) throw new Error(`invalid digest: ${errors.join("; ")}`);
   const state = readState(dir);
   const g = getGate(state, gateId);
-  if (g.approveFrom === "verified") {
-    throw new Error(`cannot render a digest for gate ${gateId}: it requires a verification verdict, not a digest`);
+  if (g.approveFrom !== "rendered") {
+    const need = g.approveFrom === "verified" ? "verification verdict" : "plan";
+    throw new Error(`cannot render a digest for gate ${gateId}: this gate is satisfied by a ${need}, not a digest`);
   }
   const digDir = path.join(dir, "digests");
   fs.mkdirSync(digDir, { recursive: true });
