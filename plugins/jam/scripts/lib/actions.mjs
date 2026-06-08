@@ -11,13 +11,13 @@ function nowIso(now) {
   return now ?? new Date().toISOString();
 }
 
-export function createRun({ projectRoot, runId, topic, now }) {
+export function createRun({ projectRoot, runId, topic, now, mode }) {
   const dir = runDir(projectRoot, runId);
   fs.mkdirSync(dir, { recursive: true });
-  const state = createInitialState({ runId, topic, now: nowIso(now) });
+  const state = createInitialState({ runId, topic, now: nowIso(now), mode });
   writeState(dir, state);
   fs.writeFileSync(activePointerPath(projectRoot), runId);
-  appendLedger(dir, { at: nowIso(now), type: "run-created", runId, topic: topic ?? "" });
+  appendLedger(dir, { at: nowIso(now), type: "run-created", runId, topic: topic ?? "", mode: mode ?? "greenfield" });
   return dir;
 }
 
@@ -34,6 +34,9 @@ export function recordDigest({ runDir: dir, gateId, digest, now }) {
   if (!valid) throw new Error(`invalid digest: ${errors.join("; ")}`);
   const state = readState(dir);
   const g = getGate(state, gateId);
+  if (g.approveFrom === "verified") {
+    throw new Error(`cannot render a digest for gate ${gateId}: it requires a verification verdict, not a digest`);
+  }
   const digDir = path.join(dir, "digests");
   fs.mkdirSync(digDir, { recursive: true });
   fs.writeFileSync(path.join(digDir, `${gateId}.json`), JSON.stringify(digest, null, 2));
@@ -49,8 +52,10 @@ export function recordApproval({ runDir: dir, gateId, who, now }) {
   if (g.mode !== "human") {
     throw new Error(`cannot approve gate ${gateId}: approval applies only to human gates (mode=${g.mode})`);
   }
-  if (g.status !== "rendered") {
-    throw new Error(`cannot approve gate ${gateId}: digest not rendered yet (status=${g.status})`);
+  const need = g.approveFrom ?? "rendered";
+  if (g.status !== need) {
+    const what = need === "verified" ? "not verified yet" : "digest not rendered yet";
+    throw new Error(`cannot approve gate ${gateId}: ${what} (status=${g.status}, needs ${need})`);
   }
   g.status = "approved";
   g.approvedBy = who ?? "user";

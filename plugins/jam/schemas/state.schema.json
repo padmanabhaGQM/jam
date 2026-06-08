@@ -9,9 +9,12 @@
   "properties": {
     "runId": { "type": "string" },
     "topic": { "type": "string" },
-    "phase": { "enum": ["ALIGN", "PLAN", "SPRINT", "FINISH"] },
+    "phase": { "enum": ["DIAGNOSE", "VERIFY", "ALIGN", "PLAN", "SPRINT", "FINISH"] },
     "currentSprint": { "type": ["integer", "null"], "minimum": 0 },
     "createdAt": { "type": "string" },
+    "mode": { "enum": ["repair", "greenfield"] },
+    "goalRef": { "type": ["string", "null"] },
+    "goalSource": { "type": ["string", "null"] },
     "codexSessionIds": {
       "type": "object",
       "description": "Codex session ids for resume, keyed by purpose (e.g. sprint index).",
@@ -30,10 +33,11 @@
         "required": ["mode", "status"],
         "properties": {
           "mode": { "enum": ["human", "show-and-proceed", "auto"] },
-          "status": { "enum": ["pending", "rendered", "evidence-passed", "approved", "rejected"] },
+          "status": { "enum": ["pending", "rendered", "verified", "evidence-passed", "approved", "rejected"] },
           "approvedBy": { "type": ["string", "null"] },
           "approvedAt": { "type": ["string", "null"] },
-          "evidenceRef": { "type": ["string", "null"] }
+          "evidenceRef": { "type": ["string", "null"] },
+          "approveFrom": { "enum": ["rendered", "verified"] }
         }
       }
     },

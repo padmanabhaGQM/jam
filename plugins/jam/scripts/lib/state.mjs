@@ -2,24 +2,33 @@ import fs from "node:fs";
 import path from "node:path";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
-const VALID_STATUSES = ["pending", "rendered", "evidence-passed", "approved", "rejected"];
+const VALID_STATUSES = ["pending", "rendered", "verified", "evidence-passed", "approved", "rejected"];
 
-export function createInitialState({ runId, topic, now }) {
+export function createInitialState({ runId, topic, now, mode }) {
   if (!runId) throw new Error("createInitialState: runId required");
-  return {
+  const repair = mode === "repair";
+  const phase = repair ? "DIAGNOSE" : "ALIGN";
+  const firstGate = repair ? "DIAGNOSE" : "ALIGN";
+  const state = {
     runId,
     topic: topic ?? "",
-    phase: "ALIGN",
+    phase,
     currentSprint: null,
     createdAt: now ?? new Date().toISOString(),
     gates: {
-      ALIGN: { mode: "human", status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null }
+      [firstGate]: { mode: "human", status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null, approveFrom: "rendered" }
     },
     dial: {},
     coverage: [],
     steeringDirectives: [],
     runaway: {}
   };
+  if (repair) {
+    state.mode = "repair";
+    state.goalRef = null;
+    state.goalSource = null;
+  }
+  return state;
 }
 
 export function validateState(state) {
@@ -62,8 +71,9 @@ export function getGate(state, gateId) {
   return g;
 }
 
-export function addGate(state, gateId, mode) {
+export function addGate(state, gateId, mode, approveFrom = "rendered") {
   if (!VALID_MODES.includes(mode)) throw new Error(`invalid mode ${mode}`);
-  state.gates[gateId] = { mode, status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null };
+  if (state.gates[gateId]) throw new Error(`gate ${gateId} already exists`);
+  state.gates[gateId] = { mode, status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null, approveFrom };
   return state;
 }

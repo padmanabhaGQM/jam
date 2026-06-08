@@ -5,11 +5,14 @@
  */
 import process from "node:process";
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 
 import { readActiveRunId, runDir } from "./lib/paths.mjs";
 import { readState } from "./lib/state.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
-import { addSteering, cancelRun } from "./lib/control.mjs";
+import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
+import { setGoal } from "./lib/goal.mjs";
+import { advanceRun } from "./lib/phases.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -139,6 +142,54 @@ function cmdCancel(cwd) {
   process.stdout.write("jam run cancelled\n");
 }
 
+function cmdDiagnose(cwd, positional, flags) {
+  const topic = positional.join(" ").trim();
+  if (!topic) fail("usage: jam diagnose <topic> --goal <file>  (or --goal-codex <goalId>)");
+  let text, source;
+  if (flags.goal) {
+    try { text = fs.readFileSync(flags.goal, "utf8"); source = `file:${flags.goal}`; }
+    catch (e) { return fail(`cannot read goal file: ${e.message}`); }
+  } else if (flags["goal-codex"]) {
+    const r = spawnSync("python3", ["-c",
+      "import sqlite3,sys,os;c=sqlite3.connect(os.path.join(os.path.expanduser('~'),'.codex','goals_1.sqlite'));"+
+      "r=c.execute('select objective from thread_goals where goal_id=?',(sys.argv[1],)).fetchone();"+
+      "print(r[0] if r else '')", flags["goal-codex"]], { encoding: "utf8" });
+    text = (r.stdout || "").trim(); source = `codex:${flags["goal-codex"]}`;
+  } else {
+    return fail("usage: jam diagnose <topic> --goal <file>  (or --goal-codex <goalId>)");
+  }
+  if (!text || !text.trim()) {
+    return fail("goal is empty; provide a non-empty --goal <file> or a valid --goal-codex <goalId>");
+  }
+  const runId = flags["run-id"] || genRunId();
+  createRun({ projectRoot: cwd, runId, topic, mode: "repair" });
+  setGoal({ runDir: runDir(cwd, runId), text, source });
+  process.stdout.write(`started repair run ${runId} (phase DIAGNOSE, gate DIAGNOSE: pending)\n`);
+}
+
+function cmdVerify(cwd, positional, flags) {
+  if (!flags.file) fail("usage: jam verify --file <verdict.json>");
+  const { dir } = requireActiveRun(cwd);
+  let verdict;
+  try { verdict = JSON.parse(fs.readFileSync(flags.file, "utf8")); }
+  catch (e) { return fail(`cannot read verdict file: ${e.message}`); }
+  const gateId = readState(dir).phase;
+  let blockers;
+  try { ({ blockers } = recordVerification({ runDir: dir, gateId, verdict })); }
+  catch (e) { return fail(e.message); }
+  process.stdout.write(blockers === 0
+    ? `verified gate ${gateId} (no surviving blockers)\n`
+    : `gate ${gateId} NOT verified — ${blockers} blocker(s) survive; revise the diagnosis\n`);
+}
+
+function cmdAdvance(cwd) {
+  const { dir } = requireActiveRun(cwd);
+  let state;
+  try { state = advanceRun({ runDir: dir }); }
+  catch (e) { return fail(e.message); }
+  process.stdout.write(`advanced to phase ${state.phase}\n`);
+}
+
 function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const cwd = process.cwd();
@@ -161,6 +212,12 @@ function main() {
       return cmdSteer(cwd, positional);
     case "cancel":
       return cmdCancel(cwd);
+    case "diagnose":
+      return cmdDiagnose(cwd, positional, flags);
+    case "verify":
+      return cmdVerify(cwd, positional, flags);
+    case "advance":
+      return cmdAdvance(cwd);
     default:
       return fail(`unknown subcommand: ${sub ?? "(none)"}`);
   }
