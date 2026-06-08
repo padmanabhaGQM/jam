@@ -73,6 +73,7 @@ export function getGate(state, gateId) {
 
 export function addGate(state, gateId, mode, approveFrom = "rendered") {
   if (!VALID_MODES.includes(mode)) throw new Error(`invalid mode ${mode}`);
+  if (state.gates[gateId]) throw new Error(`gate ${gateId} already exists`);
   state.gates[gateId] = { mode, status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null, approveFrom };
   return state;
 }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createInitialState, validateState } from "../plugins/jam/scripts/lib/state.mjs";
+import { createInitialState, validateState, addGate } from "../plugins/jam/scripts/lib/state.mjs";
 import { runDir, readActiveRunId } from "../plugins/jam/scripts/lib/paths.mjs";
 import { readState } from "../plugins/jam/scripts/lib/state.mjs";
 import { createRun } from "../plugins/jam/scripts/lib/actions.mjs";
@@ -36,4 +36,9 @@ test("createRun passes mode through to repair", () => {
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
   assert.equal(readActiveRunId(root), "r1");
   assert.equal(readState(dir).phase, "DIAGNOSE");
+});
+
+test("addGate refuses to overwrite an existing gate", () => {
+  const s = createInitialState({ runId: "r1", now: "t", mode: "repair" });
+  assert.throws(() => addGate(s, "DIAGNOSE", "human", "verified"), /already exists/);
 });

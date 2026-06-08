@@ -87,3 +87,17 @@ test("BYPASS BLOCKED: DIAGNOSE cannot be satisfied by a verdict instead of a dig
   assert.notEqual(jam(root, ["approve", "DIAGNOSE"]).status, 0);
   assert.match(jam(root, ["status"]).stdout, /phase DIAGNOSE/);
 });
+
+test("BYPASS BLOCKED: add-gate cannot clobber the verified-bound VERIFY gate", () => {
+  const root = tmp();
+  jam(root, ["diagnose", "x", "--goal", writeGoal(root), "--run-id", "r1"]);
+  jam(root, ["render-digest", "DIAGNOSE", "--file", writeDigest(root)]);
+  jam(root, ["approve", "DIAGNOSE"]);
+  jam(root, ["advance"]); // → VERIFY (verified-bound)
+  // attempt to clobber VERIFY with a fresh rendered-bound gate — must fail
+  assert.notEqual(jam(root, ["add-gate", "VERIFY", "--mode", "human"]).status, 0);
+  // VERIFY still cannot be satisfied by a digest, and cannot advance
+  assert.notEqual(jam(root, ["render-digest", "VERIFY", "--file", writeDigest(root)]).status, 0);
+  assert.notEqual(jam(root, ["advance"]).status, 0);
+  assert.match(jam(root, ["status"]).stdout, /phase VERIFY/);
+});
