@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createRun, recordDigest, recordApproval } from "../plugins/jam/scripts/lib/actions.mjs";
 import { recordVerification } from "../plugins/jam/scripts/lib/control.mjs";
-import { readState } from "../plugins/jam/scripts/lib/state.mjs";
+import { readState, writeState } from "../plugins/jam/scripts/lib/state.mjs";
 import { advanceRun } from "../plugins/jam/scripts/lib/phases.mjs";
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), "jam-ph-")); }
@@ -37,4 +37,11 @@ test("DIAGNOSE→VERIFY→PLAN advances only as gates pass", () => {
   advanceRun({ runDir: dir, now: "t7" });
   assert.equal(readState(dir).phase, "PLAN");
   assert.ok(readState(dir).gates.PLAN);
+});
+
+test("advancing from the final phase (IMPLEMENT) reports already-final, not a gate error", () => {
+  const root = tmp();
+  const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
+  const s = readState(dir); s.phase = "IMPLEMENT"; writeState(dir, s);
+  assert.throws(() => advanceRun({ runDir: dir, now: "t1" }), /already at the final repair phase/);
 });
