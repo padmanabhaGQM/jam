@@ -8,7 +8,7 @@
 
 The governing principle is **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — hooks, on-disk state, evidence scripts, schemas — that the models cannot talk past.
 
-> **Status: pre-alpha (orchestrated diagnosis).** jam can run a repair-mode DIAGNOSE→VERIFY loop: it orchestrates Claude (systematic-debugging) + Codex (independent grounding + adversarial refutation) and refuses to release a diagnosis to planning until an adversarial pass fails to break it. PLAN→IMPLEMENT + verify.sh are next.
+> **Status: pre-alpha (orchestrated diagnosis + owned Codex transport).** jam drives Codex through its own recoverable `codex exec`/`resume` engine (`jam codex-run|codex-resume|codex-status`) — captures session id + transcript, times out without ever killing Codex, and reconciles the live thread before answering. The gated DIAGNOSE→VERIFY loop uses it. PLAN→IMPLEMENT + verify.sh are next.
 
 ## What it does (when built)
 
@@ -54,11 +54,20 @@ Once installed at user level, the pairing is available in **every** project. A r
 | `/jam:resume <run-id>` | Rehydrate a run |
 | `/jam:cancel` | Kill the run |
 
+## Codex engine (owned, recoverable)
+
+```bash
+jam codex-run --prompt-file prompt.md --timeout 600000 --out-dir .jam/codex/diagnose
+# status: completed|timed_out + session id + out-dir; a timed_out Codex process is NEVER killed — resume it:
+jam codex-resume <sessionId> --prompt-file reply.md --out-dir .jam/codex/diagnose
+jam codex-status --event-log .jam/codex/diagnose/events.jsonl
+```
+
 ## Repair mode (diagnose an existing pipeline)
 
 ```bash
 jam diagnose "fix the global story spine" --goal goal.md
-# orchestrator: systematic-debugging (Claude) + /codex:rescue (Codex) → 4-detector digest
+# orchestrator: systematic-debugging (Claude) + jam codex-run (Codex grounding) → 4-detector digest
 jam render-digest DIAGNOSE --file diag.json && jam approve DIAGNOSE && jam advance   # → VERIFY
 # orchestrator: verification-before-completion + /codex:adversarial-review (refute vs source)
 jam verify --file verdict.json   # verified only if no blockers survive
