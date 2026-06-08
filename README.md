@@ -8,7 +8,7 @@
 
 The governing principle is **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — hooks, on-disk state, evidence scripts, schemas — that the models cannot talk past.
 
-> **Status: pre-alpha (drivable by hand).** The control surface and a `jam` CLI are implemented and tested — you can drive a full run end-to-end via the CLI / the `/jam:start|status|approve|steer|cancel` commands. Live Claude/Codex orchestration (auto digest/prompt generation, `/codex:*` delegation) is Slice 2b and not wired yet.
+> **Status: pre-alpha (orchestrated diagnosis).** jam can run a repair-mode DIAGNOSE→VERIFY loop: it orchestrates Claude (systematic-debugging) + Codex (independent grounding + adversarial refutation) and refuses to release a diagnosis to planning until an adversarial pass fails to break it. PLAN→IMPLEMENT + verify.sh are next.
 
 ## What it does (when built)
 
@@ -53,6 +53,17 @@ Once installed at user level, the pairing is available in **every** project. A r
 | `/jam:dial <gate> <mode>` | Adjust how strict a gate is |
 | `/jam:resume <run-id>` | Rehydrate a run |
 | `/jam:cancel` | Kill the run |
+
+## Repair mode (diagnose an existing pipeline)
+
+```bash
+jam diagnose "fix the global story spine" --goal goal.md
+# orchestrator: systematic-debugging (Claude) + /codex:rescue (Codex) → 4-detector digest
+jam render-digest DIAGNOSE --file diag.json && jam approve DIAGNOSE && jam advance   # → VERIFY
+# orchestrator: verification-before-completion + /codex:adversarial-review (refute vs source)
+jam verify --file verdict.json   # verified only if no blockers survive
+jam approve VERIFY && jam advance   # → PLAN (2b-2)
+```
 
 ## Drive a run by hand (no LLM yet)
 
