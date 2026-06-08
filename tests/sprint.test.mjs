@@ -59,3 +59,21 @@ test("allSprintsDone is false with no plan or any non-done sprint", () => {
   const { dir } = runAtImplement("true");
   assert.equal(allSprintsDone(readState(dir)), false);
 });
+
+test("allSprintsDone is false when only some sprints are done, and when there is no plan", () => {
+  const { dir } = runAtImplement("true");
+  const s = readState(dir);
+  s.plan.sprints = [
+    { id: "a", title: "t", status: "done" },
+    { id: "b", title: "t", status: "pending" }
+  ];
+  writeState(dir, s);
+  assert.equal(allSprintsDone(readState(dir)), false);
+  assert.equal(allSprintsDone({}), false);
+});
+
+test("startSprint refuses a sprint that is already in-progress", () => {
+  const { dir } = runAtImplement("true");
+  startSprint({ runDir: dir, sprintId: "fix-1" });
+  assert.throws(() => startSprint({ runDir: dir, sprintId: "fix-1" }), /not pending/);
+});
