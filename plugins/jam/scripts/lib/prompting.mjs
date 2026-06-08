@@ -17,3 +17,15 @@ export function buildAdversarialPrompt({ diagnosis, goal }) {
     "Return a verdict: are the root causes correct and GLOBAL (not local patches dressed as global fixes)? What failure mode is missed? Set unresolvedBlockers > 0 if the diagnosis is not safe to plan from."
   ].join("\n\n");
 }
+
+export function buildSprintPrompt({ sprint, goal, directives }) {
+  const active = (directives ?? []).filter((d) => d.status === "active");
+  return [
+    "Use your superpowers:test-driven-development skill. Implement EXACTLY this one sprint — write the failing test first.",
+    `Sprint ${sprint?.id}: ${sprint?.title}`,
+    sprint?.acceptanceCriteria ? `Acceptance: ${sprint.acceptanceCriteria}` : "",
+    `Acceptance goal (context):\n${goal ?? "(none)"}`,
+    active.length ? `Active steering directives (must honor):\n${active.map((d) => `- [${d.id}] ${d.text}`).join("\n")}` : "",
+    "Do NOT exceed this sprint's scope. Return exact evidence: the commands you ran, exit codes, the diff, and test output."
+  ].filter(Boolean).join("\n\n");
+}
