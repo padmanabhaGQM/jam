@@ -23,3 +23,25 @@ export function validateDigest(digest) {
 
   return { valid: errors.length === 0, errors };
 }
+
+export function renderDigest(d) {
+  if (!d || typeof d !== "object") return "(no digest)";
+  const t = d.traceToArchitecture ?? {};
+  const gm = d.globalMap ?? {};
+  const cov = d.coverage ?? {};
+  const lines = [];
+  lines.push(`# jam digest — ${d.phase ?? ""}${d.sprint != null ? ` (sprint ${d.sprint})` : ""}`.trim());
+  lines.push(d.summary ?? "");
+  lines.push("## 1. Trace to architecture");
+  for (const c of t.componentsTouched ?? []) lines.push(`- ${c}`);
+  if (t.gapFromAgreed) lines.push(`- ⚠ gap from agreed: ${t.gapFromAgreed}`);
+  lines.push("## 2. Decisions");
+  for (const dec of d.decisions ?? []) lines.push(`- **${dec.choice}** (vs ${(dec.alternatives ?? []).join(", ")}) — ${dec.why}`);
+  lines.push("## 3. Global map");
+  lines.push("```mermaid\n" + (gm.mermaid ?? "") + "\n```");
+  lines.push(`position: ${gm.currentPosition ?? ""}${gm.isLocallyScopedRisk ? "  ⚠ LOCAL-HACK RISK" : ""}`);
+  lines.push("## 4. Coverage");
+  lines.push(`addressed: ${(cov.addressed ?? []).join("; ")}`);
+  lines.push(`dropped: ${(cov.dropped ?? []).join("; ")}`);
+  return lines.join("\n");
+}
