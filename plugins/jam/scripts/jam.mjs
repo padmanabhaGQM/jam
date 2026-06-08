@@ -195,7 +195,7 @@ function cmdAdvance(cwd) {
 }
 
 async function cmdCodexRun(cwd, positional, flags) {
-  if (!flags["prompt-file"]) fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>]");
+  if (!flags["prompt-file"]) return fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>]");
   let prompt;
   try { prompt = fs.readFileSync(flags["prompt-file"], "utf8"); } catch (e) { return fail(`cannot read prompt file: ${e.message}`); }
   const outDir = flags["out-dir"] || fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
@@ -203,16 +203,16 @@ async function cmdCodexRun(cwd, positional, flags) {
   const eventLog = path.join(outDir, "events.jsonl");
   const lastMsg = path.join(outDir, "last.md");
   codexStart({ prompt, cwd: flags.cwd || cwd, eventLog, lastMsg });
-  const timeoutMs = flags.timeout ? Number(flags.timeout) : 120000;
+  const timeoutMs = Number(flags.timeout) || 120000;
   const r = await codexWait({ eventLog, lastMsg, timeoutMs });
-  process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? "(none)"}\n`);
+  process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? "(none)"}\nout-dir: ${outDir}\n`);
   if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
   else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). Resume with: jam codex-resume ${r.sessionId ?? "<id>"} --prompt-file <reply>\n`);
 }
 
 async function cmdCodexResume(cwd, positional, flags) {
   const sessionId = positional[0];
-  if (!sessionId || !flags["prompt-file"]) fail("usage: jam codex-resume <sessionId> --prompt-file <f> [--timeout <ms>] [--out-dir <dir>]");
+  if (!sessionId || !flags["prompt-file"]) return fail("usage: jam codex-resume <sessionId> --prompt-file <f> [--timeout <ms>] [--out-dir <dir>]");
   let prompt;
   try { prompt = fs.readFileSync(flags["prompt-file"], "utf8"); } catch (e) { return fail(`cannot read prompt file: ${e.message}`); }
   const outDir = flags["out-dir"] || fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
@@ -220,9 +220,9 @@ async function cmdCodexResume(cwd, positional, flags) {
   const eventLog = path.join(outDir, "events.jsonl");
   const lastMsg = path.join(outDir, "last.md");
   codexResume({ sessionId, prompt, eventLog, lastMsg });
-  const timeoutMs = flags.timeout ? Number(flags.timeout) : 120000;
+  const timeoutMs = Number(flags.timeout) || 120000;
   const r = await codexWait({ eventLog, lastMsg, timeoutMs });
-  process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? sessionId}\n`);
+  process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? sessionId}\nout-dir: ${outDir}\n`);
   if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
   else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed).\n`);
 }

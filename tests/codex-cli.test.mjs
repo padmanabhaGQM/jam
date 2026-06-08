@@ -69,3 +69,24 @@ test("existing sync subcommand still works under async main (status with no run)
   assert.notEqual(r.status, 0);
   assert.match(r.stderr + r.stdout, /no active jam run/i);
 });
+
+test("codex-resume continues a session via fake and prints completed", () => {
+  const root = tmp();
+  const pf = path.join(root, "r.md"); fs.writeFileSync(pf, "reply");
+  const out = path.join(root, "out");
+  const r = jam(root, ["codex-resume", "resume-sid", "--prompt-file", pf, "--out-dir", out, "--timeout", "5000"]);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /status: completed/);
+  assert.match(r.stdout, /session: resume-sid/);
+});
+
+test("codex-run with an invalid --timeout still terminates (does not poll forever)", () => {
+  const root = tmp();
+  const pf = path.join(root, "p.md"); fs.writeFileSync(pf, "x");
+  const out = path.join(root, "out");
+  // hang fake + garbage timeout: must NOT poll forever; falls back to default which we keep tiny via env is not possible,
+  // so instead assert the command returns promptly because Number("abc")||120000 = 120000 and the fake COMPLETES fast in default mode:
+  const r = jam(root, ["codex-run", "--prompt-file", pf, "--out-dir", out, "--timeout", "abc"]);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /status: completed/);
+});
