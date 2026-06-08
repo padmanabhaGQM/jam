@@ -60,3 +60,10 @@ test("recordPlan throws if the PLAN gate is not plan-bound", () => {
   const s = readState(dir); addGate(s, "PLAN", "human", "rendered"); writeState(dir, s);
   assert.throws(() => recordPlan({ runDir: dir, plan: planObj() }), /not a plan gate/);
 });
+
+test("recordPlan refuses to re-record after the PLAN gate is approved", () => {
+  const dir = runAtPlan();
+  recordPlan({ runDir: dir, plan: planObj(), now: "t1" });
+  const s = readState(dir); s.gates.PLAN.status = "approved"; writeState(dir, s);
+  assert.throws(() => recordPlan({ runDir: dir, plan: planObj(), now: "t2" }), /already approved/);
+});

@@ -28,6 +28,7 @@ export function recordPlan({ runDir: dir, plan, now }) {
   let g;
   try { g = getGate(state, "PLAN"); } catch { throw new Error("cannot record plan: not in PLAN phase (no PLAN gate)"); }
   if (g.approveFrom !== "planned") throw new Error(`gate PLAN is not a plan gate (approveFrom=${g.approveFrom})`);
+  if (g.status === "approved") throw new Error("cannot record plan: PLAN gate already approved (cancel or rewind to change it)");
   fs.writeFileSync(path.join(dir, "plan.json"), JSON.stringify(plan, null, 2));
   state.plan = {
     verifyCmd: plan.verifyCmd,
