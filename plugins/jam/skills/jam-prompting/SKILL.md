@@ -10,7 +10,7 @@ Prompt text for both Codex passes is produced by `lib/prompting.mjs`. Use those 
 ## Functions
 
 **`buildGroundingPrompt({ goal, repoFacts, directives })`**
-Produces the prompt for the DIAGNOSE grounding pass (`/codex:rescue`). It:
+Produces the prompt for the DIAGNOSE grounding pass (jam codex engine). It:
 - Instructs Codex to use its `superpowers:systematic-debugging` skill — find the ROOT CAUSE before proposing any fix.
 - Injects the acceptance goal and repo facts.
 - Renders all `status: "active"` steering directives from the `directives` array so Codex honors them.
@@ -27,10 +27,12 @@ Produces the prompt for the VERIFY adversarial pass (`/codex:adversarial-review`
 ```js
 import { buildGroundingPrompt, buildAdversarialPrompt } from "./scripts/lib/prompting.mjs";
 
-// DIAGNOSE pass — feed to /codex:rescue --background
+// DIAGNOSE pass — feed via jam codex engine
+// node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" codex-run --prompt-file <p> --timeout <ms> --out-dir <dir>
+// Then: jam codex-resume <sessionId>
 const groundingText = buildGroundingPrompt({ goal, repoFacts, directives });
 
-// VERIFY pass — feed to /codex:adversarial-review --background
+// VERIFY pass — feed to /codex:adversarial-review
 const adversarialText = buildAdversarialPrompt({ diagnosis, goal });
 ```
 

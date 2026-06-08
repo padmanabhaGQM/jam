@@ -33,11 +33,11 @@
         "required": ["mode", "status"],
         "properties": {
           "mode": { "enum": ["human", "show-and-proceed", "auto"] },
-          "status": { "enum": ["pending", "rendered", "verified", "evidence-passed", "approved", "rejected"] },
+          "status": { "enum": ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected"] },
           "approvedBy": { "type": ["string", "null"] },
           "approvedAt": { "type": ["string", "null"] },
           "evidenceRef": { "type": ["string", "null"] },
-          "approveFrom": { "enum": ["rendered", "verified"] }
+          "approveFrom": { "enum": ["rendered", "verified", "planned"] }
         }
       }
     },
@@ -77,6 +77,25 @@
       "type": "object",
       "description": "Bounded-exchange / cost counters per phase for the runaway guard.",
       "additionalProperties": { "type": "number" }
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "verifyCmd": { "type": "string" },
+        "sprints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "status"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "acceptanceCriteria": { "type": "string" },
+              "status": { "enum": ["pending", "in-progress", "done"] }
+            }
+          }
+        }
+      }
     }
   }
 }

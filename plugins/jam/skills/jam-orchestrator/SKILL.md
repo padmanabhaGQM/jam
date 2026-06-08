@@ -125,6 +125,41 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
 
 ---
 
+## PLAN phase
+
+### Steps
+
+1. **Enter PLAN.**
+   ```bash
+   jam advance
+   ```
+   Run this after VERIFY has been approved. If `jam advance` refuses (gate unsatisfied), satisfy the gate first — do not proceed manually.
+
+2. **Author the plan.**
+   Invoke `superpowers:writing-plans`. Working from the verified, adversarially-cleared diagnosis, decompose the fix into **sprints**: each sprint must be global-structural (not a local patch), tied to the goal's gates, and independently verifiable. Alongside the sprint list, define **`verifyCmd`** — the project's *global* acceptance gate (validators + reviewer scores; the command must exit 0 if and only if the goal's gates pass). The plan is not done until both are present.
+
+3. **Challenge it.**
+   Run `/codex:adversarial-review` on the plan. Codex must look for sequencing errors, gaps between sprints, and local-patch smells that would break the global acceptance gate. Resolve any blocker-level findings before recording.
+
+4. **Record + gate.**
+   Write `plan.json` with the shape:
+   ```json
+   { "verifyCmd": "...", "sprints": [{ "id": "...", "title": "...", "acceptanceCriteria": "..." }] }
+   ```
+   Then record it and flip the PLAN gate:
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" plan --file plan.json
+   ```
+   **The PLAN gate is plan-bound.** A digest or an adversarial-review verdict cannot satisfy it; only a valid recorded plan flips it to `planned`.
+
+5. **Approve + advance to IMPLEMENT.**
+   ```bash
+   /jam:approve PLAN
+   jam advance   # → IMPLEMENT (M3b boundary — stop here; the gated implement loop is the next slice)
+   ```
+
+---
+
 ## Codex-hang protocol (REQUIRED)
 
 Codex turns can time out in practice. jam's engine **never kills** a Codex process; neither do you. Always follow this protocol:
@@ -160,7 +195,7 @@ If the user runs `/jam:steer "<directive>"` at any point, that directive is writ
 
 ```
 DIAGNOSE → VERIFY → PLAN → IMPLEMENT
-                           ↑ (Slice 2b-2, not yet wired)
+                              ↑ (M3b — gated implement loop; next slice)
 ```
 
-This skill covers DIAGNOSE and VERIFY. Stop at `jam advance` → PLAN and hand off to the next slice.
+This skill covers DIAGNOSE, VERIFY, and PLAN. Stop at `jam advance` → IMPLEMENT and hand off to the next slice.
