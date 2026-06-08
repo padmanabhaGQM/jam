@@ -12,7 +12,7 @@ export function advancePhase(state) {
   const { allowed, reason } = evaluateGate(state, state.phase);
   if (!allowed) throw new Error(`cannot advance from ${state.phase}: ${reason}`);
   state.phase = next;
-  if (next !== "IMPLEMENT") addGate(state, next, "human");
+  if (next !== "IMPLEMENT") addGate(state, next, "human", next === "VERIFY" ? "verified" : "rendered");
   return state;
 }
 

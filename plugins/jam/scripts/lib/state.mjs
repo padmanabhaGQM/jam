@@ -16,7 +16,7 @@ export function createInitialState({ runId, topic, now, mode }) {
     currentSprint: null,
     createdAt: now ?? new Date().toISOString(),
     gates: {
-      [firstGate]: { mode: "human", status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null }
+      [firstGate]: { mode: "human", status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null, approveFrom: "rendered" }
     },
     dial: {},
     coverage: [],
@@ -71,8 +71,8 @@ export function getGate(state, gateId) {
   return g;
 }
 
-export function addGate(state, gateId, mode) {
+export function addGate(state, gateId, mode, approveFrom = "rendered") {
   if (!VALID_MODES.includes(mode)) throw new Error(`invalid mode ${mode}`);
-  state.gates[gateId] = { mode, status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null };
+  state.gates[gateId] = { mode, status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null, approveFrom };
   return state;
 }

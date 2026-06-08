@@ -67,3 +67,23 @@ test("diagnose with a whitespace-only goal file errors and creates no run", () =
   // no active run was created
   assert.notEqual(jam(root, ["status"]).status, 0);
 });
+
+test("BYPASS BLOCKED: VERIFY cannot be satisfied by a digest instead of a verdict", () => {
+  const root = tmp();
+  jam(root, ["diagnose", "x", "--goal", writeGoal(root), "--run-id", "r1"]);
+  jam(root, ["render-digest", "DIAGNOSE", "--file", writeDigest(root)]);
+  jam(root, ["approve", "DIAGNOSE"]);
+  jam(root, ["advance"]); // → VERIFY
+  assert.notEqual(jam(root, ["render-digest", "VERIFY", "--file", writeDigest(root)]).status, 0);
+  assert.notEqual(jam(root, ["approve", "VERIFY"]).status, 0);
+  assert.notEqual(jam(root, ["advance"]).status, 0);
+  assert.match(jam(root, ["status"]).stdout, /phase VERIFY/);
+});
+
+test("BYPASS BLOCKED: DIAGNOSE cannot be satisfied by a verdict instead of a digest", () => {
+  const root = tmp();
+  jam(root, ["diagnose", "x", "--goal", writeGoal(root), "--run-id", "r1"]);
+  assert.notEqual(jam(root, ["verify", "--file", writeVerdict(root, 0)]).status, 0);
+  assert.notEqual(jam(root, ["approve", "DIAGNOSE"]).status, 0);
+  assert.match(jam(root, ["status"]).stdout, /phase DIAGNOSE/);
+});

@@ -36,7 +36,8 @@
           "status": { "enum": ["pending", "rendered", "verified", "evidence-passed", "approved", "rejected"] },
           "approvedBy": { "type": ["string", "null"] },
           "approvedAt": { "type": ["string", "null"] },
-          "evidenceRef": { "type": ["string", "null"] }
+          "evidenceRef": { "type": ["string", "null"] },
+          "approveFrom": { "enum": ["rendered", "verified"] }
         }
       }
     },

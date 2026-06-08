@@ -10,7 +10,7 @@ import { readLedger } from "../plugins/jam/scripts/lib/ledger.mjs";
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), "jam-ver-")); }
 function addVerifyGate(dir) {
-  const s = readState(dir); addGate(s, "VERIFY", "human"); writeState(dir, s); return dir;
+  const s = readState(dir); addGate(s, "VERIFY", "human", "verified"); writeState(dir, s); return dir;
 }
 
 test("clean verdict (no blockers) sets gate to verified; then it is approvable", () => {

@@ -34,6 +34,9 @@ export function recordDigest({ runDir: dir, gateId, digest, now }) {
   if (!valid) throw new Error(`invalid digest: ${errors.join("; ")}`);
   const state = readState(dir);
   const g = getGate(state, gateId);
+  if (g.approveFrom === "verified") {
+    throw new Error(`cannot render a digest for gate ${gateId}: it requires a verification verdict, not a digest`);
+  }
   const digDir = path.join(dir, "digests");
   fs.mkdirSync(digDir, { recursive: true });
   fs.writeFileSync(path.join(digDir, `${gateId}.json`), JSON.stringify(digest, null, 2));
@@ -49,8 +52,10 @@ export function recordApproval({ runDir: dir, gateId, who, now }) {
   if (g.mode !== "human") {
     throw new Error(`cannot approve gate ${gateId}: approval applies only to human gates (mode=${g.mode})`);
   }
-  if (!["rendered", "verified"].includes(g.status)) {
-    throw new Error(`cannot approve gate ${gateId}: digest not rendered / not verified yet (status=${g.status})`);
+  const need = g.approveFrom ?? "rendered";
+  if (g.status !== need) {
+    const what = need === "verified" ? "not verified yet" : "digest not rendered yet";
+    throw new Error(`cannot approve gate ${gateId}: ${what} (status=${g.status}, needs ${need})`);
   }
   g.status = "approved";
   g.approvedBy = who ?? "user";
