@@ -45,3 +45,26 @@ test("a human DIAGNOSE gate still throws on approve-before-render (regression)",
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
   assert.throws(() => recordApproval({ runDir: dir, gateId: "DIAGNOSE", now: "t1" }), /digest not rendered/);
 });
+
+test("recordVerification THROWS on an empty/missing verdict — never auto-passes", () => {
+  const root = tmp();
+  const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
+  addVerifyGate(dir);
+  assert.throws(() => recordVerification({ runDir: dir, gateId: "VERIFY", verdict: {}, now: "t1" }), /verdict must include/);
+  assert.throws(() => recordVerification({ runDir: dir, gateId: "VERIFY", now: "t1" }), /verdict must include/);
+  assert.equal(readState(dir).gates.VERIFY.status, "pending");
+});
+
+test("recordVerification THROWS on a non-human gate", () => {
+  const root = tmp();
+  const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
+  const s = readState(dir); addGate(s, "auto-g", "auto"); writeState(dir, s);
+  assert.throws(() => recordVerification({ runDir: dir, gateId: "auto-g", verdict: { unresolvedBlockers: 0 }, now: "t1" }), /human gates/);
+});
+
+test("recordVerification THROWS on a negative blocker count", () => {
+  const root = tmp();
+  const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
+  addVerifyGate(dir);
+  assert.throws(() => recordVerification({ runDir: dir, gateId: "VERIFY", verdict: { unresolvedBlockers: -1 }, now: "t1" }), /non-negative integer/);
+});
