@@ -126,6 +126,18 @@ test("audit passes when a dependency was done before the dependent started", () 
   assert.doesNotMatch(evaluateAudit({ ledger: l, state, transcriptExists: yes }).failures.join(" | "), /started before its dependency/);
 });
 
+test("audit fails on an undecided irreversible action", () => {
+  const state = { ...goodState(), actions: [{ id: "del-1", type: "delete-path", irreversible: true, reasons: [], status: "proposed", at: "t" }] };
+  assert.match(evaluateAudit({ ledger: goodLedger(), state, transcriptExists: yes }).failures.join(" | "), /irreversible action del-1 is undecided/);
+});
+
+test("audit passes once the irreversible action is ratified or denied", () => {
+  const ratified = { ...goodState(), actions: [{ id: "del-1", type: "delete-path", irreversible: true, reasons: [], status: "ratified", at: "t" }] };
+  assert.doesNotMatch(evaluateAudit({ ledger: goodLedger(), state: ratified, transcriptExists: yes }).failures.join(" | "), /undecided/);
+  const denied = { ...goodState(), actions: [{ id: "del-1", type: "delete-path", irreversible: true, reasons: [], status: "denied", at: "t" }] };
+  assert.doesNotMatch(evaluateAudit({ ledger: goodLedger(), state: denied, transcriptExists: yes }).failures.join(" | "), /undecided/);
+});
+
 test("auditRun reads a real run dir: PASS with a real transcript, FAIL without", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "jam-audit-"));
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });

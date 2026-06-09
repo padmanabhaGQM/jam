@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
-const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected"];
+const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified"];
+const VALID_ACTION_STATUSES = new Set(["proposed", "ratified", "denied", "allowed"]);
 
 export function createInitialState({ runId, topic, now, mode }) {
   if (!runId) throw new Error("createInitialState: runId required");
@@ -73,6 +74,19 @@ export function validateState(state) {
       for (const p of state.promotions) {
         if (!p || typeof p.id !== "string" || typeof p.reason !== "string") {
           errors.push("each promotion needs a string id and reason");
+        }
+      }
+    }
+  }
+  if ("actions" in state) {
+    if (!Array.isArray(state.actions)) {
+      errors.push("actions must be an array");
+    } else {
+      for (const a of state.actions) {
+        if (!a || typeof a.id !== "string" || typeof a.irreversible !== "boolean") {
+          errors.push("each action needs a string id and boolean irreversible");
+        } else if (!VALID_ACTION_STATUSES.has(a.status)) {
+          errors.push(`action ${a.id} has invalid status "${a.status}"`);
         }
       }
     }
