@@ -1,8 +1,10 @@
 {
   "name": "jam",
-  "version": "0.10.0",
-  "description": "Honest, controlled Claude–Codex build loop. Composes openai/codex-plugin-cc; adds a deterministic control surface (gates, evidence, ledger, digests, steering).",
+  "version": "0.11.0",
+  "description": "Honest, controlled Claude–Codex build loop. Composes openai/codex-plugin-cc; adds a deterministic control surface (gates, evidence, ledger, run-honesty audit, scope governance, sprint DAG).",
   "author": {
     "name": "Padmanabha Banerjee (Neel)"
-  }
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/padmanabhaGQM/jam"
 }
