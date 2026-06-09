@@ -3,6 +3,7 @@ import path from "node:path";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
 const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified"];
+const VALID_ACTION_STATUSES = new Set(["proposed", "ratified", "denied", "allowed"]);
 
 export function createInitialState({ runId, topic, now, mode }) {
   if (!runId) throw new Error("createInitialState: runId required");
@@ -84,6 +85,8 @@ export function validateState(state) {
       for (const a of state.actions) {
         if (!a || typeof a.id !== "string" || typeof a.irreversible !== "boolean") {
           errors.push("each action needs a string id and boolean irreversible");
+        } else if (!VALID_ACTION_STATUSES.has(a.status)) {
+          errors.push(`action ${a.id} has invalid status "${a.status}"`);
         }
       }
     }

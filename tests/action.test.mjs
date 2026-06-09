@@ -62,6 +62,13 @@ test("validateState value-checks actions; ratified is a valid gate status", () =
   assert.ok(validateState(s).some((e) => /actions must be an array/.test(e)));
 });
 
+test("validateState rejects an action with an out-of-enum status", () => {
+  const dir = run();
+  const s = readState(dir);
+  s.actions = [{ id: "a", type: "delete-path", irreversible: true, reasons: [], status: "bogus", at: "t" }];
+  assert.ok(validateState(s).some((e) => /invalid status/.test(e)));
+});
+
 test("an irreversible action gate cannot be opened by /jam:approve, and the refusal names ratify (honest message)", () => {
   const dir = run();
   proposeAction({ runDir: dir, id: "del-1", type: "delete-path", now: "t1" });
