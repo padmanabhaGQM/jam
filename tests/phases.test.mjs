@@ -7,6 +7,7 @@ import { createRun, recordDigest, recordApproval } from "../plugins/jam/scripts/
 import { recordVerification } from "../plugins/jam/scripts/lib/control.mjs";
 import { readState, writeState } from "../plugins/jam/scripts/lib/state.mjs";
 import { advanceRun } from "../plugins/jam/scripts/lib/phases.mjs";
+import { appendLedger } from "../plugins/jam/scripts/lib/ledger.mjs";
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), "jam-ph-")); }
 function digest() {
@@ -47,7 +48,15 @@ test("IMPLEMENT advances to FINISH only when all sprints are done", () => {
   s.plan = { verifyCmd: "true", sprints: [{ id: "a", title: "t", status: "pending" }] };
   writeState(dir, s);
   assert.throws(() => advanceRun({ runDir: dir, now: "t1" }), /not all sprints done/);
-  const s2 = readState(dir); s2.plan.sprints[0].status = "done"; s2.plan.sprints[0].codexSessions = [{ sessionId: "s", transcriptPath: null, at: "t" }]; writeState(dir, s2);
+  const tp = path.join(root, "transcript.jsonl");
+  fs.writeFileSync(tp, "{}\n");
+  const s2 = readState(dir);
+  s2.plan.sprints[0].status = "done";
+  s2.plan.sprints[0].codexSessions = [{ sessionId: "s", transcriptPath: tp, at: "t" }];
+  writeState(dir, s2);
+  appendLedger(dir, { at: "t", type: "codex-bound", sprintId: "a", sessionId: "s" });
+  appendLedger(dir, { at: "t", type: "evidence", gateId: "sprint-a", sprintId: "a", exitCode: 0 });
+  appendLedger(dir, { at: "t", type: "sprint-done", sprintId: "a" });
   advanceRun({ runDir: dir, now: "t2" });
   assert.equal(readState(dir).phase, "FINISH");
 });

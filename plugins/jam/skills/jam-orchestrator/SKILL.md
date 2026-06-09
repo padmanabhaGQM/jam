@@ -200,10 +200,12 @@ Work the sprint list **one at a time, in order**. Each sprint is gated by the ru
 
 6. **Next sprint.** Repeat 1–5 for each. When all sprints are `done`:
    ```bash
-   jam advance   # → FINISH (refuses unless ALL sprints are done)
+   jam advance   # → FINISH (refuses unless ALL sprints done AND the honesty audit passes)
    ```
 
 State it plainly to the user: **a sprint cannot be `done` unless the global `verifyCmd` passes — local green is not enough.** That is what structurally ends the locally-correct-globally-broken loop.
+
+Advancing to FINISH also runs the **run-honesty audit** (`jam audit`): it re-checks the ledger so far — phase order, that each approval was preceded by its producing digest/verdict/plan, and that every done sprint has a Codex-bound session with a live transcript and a passing evidence record — and refuses FINISH if the recorded process is inconsistent or forged. Run `jam audit` anytime to check a run's integrity.
 
 ---
 
