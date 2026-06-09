@@ -77,6 +77,12 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     }
   });
 
+  for (const a of state.actions ?? []) {
+    if (a.irreversible && a.status === "proposed") {
+      failures.push(`governance: irreversible action ${a.id} is undecided — ratify or deny before FINISH`);
+    }
+  }
+
   return { ok: failures.length === 0, failures };
 }
 
