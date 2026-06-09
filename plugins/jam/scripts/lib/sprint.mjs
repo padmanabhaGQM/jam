@@ -17,6 +17,9 @@ export function startSprint({ runDir: dir, sprintId, now }) {
   const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
   if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
   if (sprint.status !== "pending") throw new Error(`sprint ${sprintId} is ${sprint.status}, not pending`);
+  if (!["planned", "promoted"].includes(sprint.provenance)) {
+    throw new Error(`sprint ${sprintId} has no valid provenance (planned|promoted) — scope must be planned or promoted`);
+  }
   sprint.status = "in-progress";
   addGate(state, sprintGateId(sprintId), "auto");
   writeState(dir, state);

@@ -13,7 +13,7 @@ function runAtImplement(verifyCmd) {
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
   const s = readState(dir);
   s.phase = "IMPLEMENT";
-  s.plan = { verifyCmd, sprints: [{ id: "fix-1", title: "t", acceptanceCriteria: "ac", status: "pending" }] };
+  s.plan = { verifyCmd, sprints: [{ id: "fix-1", title: "t", acceptanceCriteria: "ac", status: "pending", provenance: "planned" }] };
   writeState(dir, s);
   return { root, dir };
 }
@@ -31,6 +31,12 @@ test("startSprint refuses off-IMPLEMENT, unknown, or non-pending sprints", () =>
   assert.throws(() => startSprint({ runDir: dir, sprintId: "nope" }), /unknown sprint/);
   const s = readState(dir); s.phase = "PLAN"; writeState(dir, s);
   assert.throws(() => startSprint({ runDir: dir, sprintId: "fix-1" }), /not IMPLEMENT/);
+});
+
+test("startSprint refuses a sprint with no valid provenance", () => {
+  const { dir } = runAtImplement("true");
+  const s = readState(dir); delete s.plan.sprints[0].provenance; writeState(dir, s);
+  assert.throws(() => startSprint({ runDir: dir, sprintId: "fix-1" }), /no valid provenance/);
 });
 
 test("verifySprint passes the gate on exit 0, leaves it pending on non-zero", () => {
