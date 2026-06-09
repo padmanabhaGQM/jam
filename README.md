@@ -8,7 +8,7 @@
 
 The governing principle is **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — hooks, on-disk state, evidence scripts, schemas — that the models cannot talk past.
 
-> **Status: pre-alpha (full gated repair loop: diagnose → verify → plan → implement → finish).** jam runs the whole repair loop over its own recoverable Codex engine (proven against real Codex); each implementation sprint is gated by the project's global `verifyCmd` **and by Codex authorship** — a sprint cannot complete unless the acceptance gate passes and a real Codex session (with a locatable transcript) authored it — and reaching FINISH requires a **run-honesty audit** of the ledger (ordering + Codex authorship + evidence). A real `verify.sh` is the remaining validation step before production use.
+> **Status: pre-alpha (full gated repair loop: diagnose → verify → plan → implement → finish).** jam runs the whole repair loop over its own recoverable Codex engine (proven against real Codex); each implementation sprint is gated by the project's global `verifyCmd` **and by Codex authorship** — a sprint cannot complete unless the acceptance gate passes and a real Codex session (with a locatable transcript) authored it — and reaching FINISH requires a **run-honesty audit** of the ledger (ordering + Codex authorship + evidence + scope provenance). Scope can't expand silently — every sprint is `planned` (user-approved) or `promoted` (a recorded `jam promote-sprint` decision). A real `verify.sh` is the remaining validation step before production use.
 
 ## What it does (when built)
 
@@ -88,6 +88,7 @@ jam approve PLAN && jam advance    # → IMPLEMENT
 ```bash
 # at IMPLEMENT, per sprint:
 jam sprint fix-1 --start
+jam promote-sprint fix-9 --title "..." --reason "discovered during fix-1"  # governed scope expansion (provenance: promoted)
 jam codex-run --sprint fix-1 --prompt-file p.md --out-dir .jam/codex/fix-1  # Codex implements; binds the session+transcript to the sprint
 jam sprint fix-1 --verify     # jam runs the GLOBAL verifyCmd; passes only on exit 0
 jam sprint fix-1 --done       # refuses unless verified AND a Codex session authored it
