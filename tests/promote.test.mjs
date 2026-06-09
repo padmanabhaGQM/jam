@@ -44,6 +44,16 @@ test("promoteSprint refuses when no plan has been recorded", () => {
   assert.throws(() => promoteSprint({ runDir: dir, id: "x", title: "t", reason: "r" }), /no plan/);
 });
 
+test("promoteSprint accepts needs referencing an existing sprint", () => {
+  const dir = runAtImplement();
+  promoteSprint({ runDir: dir, id: "fix-9", title: "t", reason: "r", needs: ["fix-1"], now: "t1" });
+  assert.deepEqual(readState(dir).plan.sprints.find((s) => s.id === "fix-9").needs, ["fix-1"]);
+});
+test("promoteSprint refuses a needs that creates a dangling graph", () => {
+  const dir = runAtImplement();
+  assert.throws(() => promoteSprint({ runDir: dir, id: "fix-9", title: "t", reason: "r", needs: ["ghost"] }), /invalid sprint graph/);
+});
+
 test("validateState rejects invalid provenance and malformed promotions; accepts valid/absent", () => {
   const dir = runAtImplement();
   const s = readState(dir);
