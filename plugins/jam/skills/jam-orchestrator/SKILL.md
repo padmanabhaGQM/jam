@@ -209,6 +209,8 @@ Advancing to FINISH also runs the **run-honesty audit** (`jam audit`): it re-che
 
 If implementation surfaces scope beyond the approved plan — a new sprint Codex or the diagnosis reveals — it must be **promoted**, never silently worked: `jam promote-sprint <id> --title <t> --reason <why>`. A promotion is recorded (provenance `promoted` + a `promotions` decision) and surfaced in `jam status`; `startSprint` refuses scope with no provenance and the FINISH audit refuses a `promoted` sprint with no decision trail. Promoting adds an undone sprint, so FINISH correctly waits for the new scope to be implemented, verified, and done.
 
+Sprints form a **dependency DAG**: a sprint declares `needs: [ids]` (in `plan.json`, or via `jam promote-sprint … --needs a,b`) and cannot `--start` until its dependencies are `done`. The graph must be acyclic — a cyclic or dangling-reference plan is rejected at PLAN, and a promotion that would create a cycle is refused — and the FINISH audit proves the recorded order was honored (no sprint started before a dependency finished). `jam status` shows each sprint as `(ready)` or `(blocked)`; work the ready ones in dependency order.
+
 ---
 
 ## Codex-hang protocol (REQUIRED)
