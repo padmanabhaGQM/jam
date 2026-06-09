@@ -77,8 +77,13 @@ function cmdStatus(cwd) {
   }
   if (state.plan) {
     lines.push(`  verify: ${state.plan.verifyCmd}`);
+    const done = new Set(state.plan.sprints.filter((s) => s.status === "done").map((s) => s.id));
     for (const sp of state.plan.sprints) {
-      lines.push(`  sprint ${sp.id}: ${sp.status} [${sp.provenance ?? "?"}] — ${sp.title}`);
+      const needs = sp.needs ?? [];
+      const blocked = sp.status === "pending" && needs.some((n) => !done.has(n));
+      const tag = sp.status === "pending" ? (blocked ? " (blocked)" : " (ready)") : "";
+      const needsStr = needs.length ? ` needs:${needs.join(",")}` : "";
+      lines.push(`  sprint ${sp.id}: ${sp.status} [${sp.provenance ?? "?"}]${needsStr}${tag} — ${sp.title}`);
       for (const cs of sp.codexSessions ?? []) {
         lines.push(`      codex: ${cs.sessionId} (${cs.transcriptPath ? "transcript" : "no-transcript"})`);
       }
@@ -308,7 +313,7 @@ function cmdPromoteSprint(cwd, positional, flags) {
   if (!id || !flags.title || !flags.reason) return fail("usage: jam promote-sprint <id> --title <t> --reason <r> [--acceptance <a>] [--discovered-by <d>]");
   const { dir } = requireActiveRun(cwd);
   try {
-    promoteSprint({ runDir: dir, id, title: flags.title, acceptanceCriteria: flags.acceptance, discoveredBy: flags["discovered-by"], reason: flags.reason });
+    promoteSprint({ runDir: dir, id, title: flags.title, acceptanceCriteria: flags.acceptance, discoveredBy: flags["discovered-by"], reason: flags.reason, needs: flags.needs ? String(flags.needs).split(",").map((x) => x.trim()).filter(Boolean) : [] });
     process.stdout.write(`promoted sprint ${id} (provenance: promoted)\n`);
   } catch (e) { return fail(e.message); }
 }
