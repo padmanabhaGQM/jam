@@ -39,6 +39,23 @@ test("startSprint refuses a sprint with no valid provenance", () => {
   assert.throws(() => startSprint({ runDir: dir, sprintId: "fix-1" }), /no valid provenance/);
 });
 
+test("startSprint blocks a sprint until its needs are done", () => {
+  const { dir } = runAtImplement("true");
+  const s = readState(dir);
+  s.plan.sprints = [
+    { id: "a", title: "t", status: "pending", provenance: "planned", needs: [] },
+    { id: "b", title: "t", status: "pending", provenance: "planned", needs: ["a"] },
+  ];
+  writeState(dir, s);
+  assert.throws(() => startSprint({ runDir: dir, sprintId: "b" }), /blocked: needs a/);
+  const s2 = readState(dir);
+  s2.plan.sprints[0].status = "done";
+  s2.plan.sprints[0].codexSessions = [{ sessionId: "s", transcriptPath: null, at: "t" }];
+  writeState(dir, s2);
+  startSprint({ runDir: dir, sprintId: "b" });
+  assert.equal(readState(dir).plan.sprints.find((x) => x.id === "b").status, "in-progress");
+});
+
 test("verifySprint passes the gate on exit 0, leaves it pending on non-zero", () => {
   const ok = runAtImplement("true");
   startSprint({ runDir: ok.dir, sprintId: "fix-1" });

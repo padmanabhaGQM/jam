@@ -67,6 +67,16 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     }
   }
 
+  const byId = new Map(sprints.map((s) => [s.id, s]));
+  ledger.forEach((e, i) => {
+    if (e.type !== "sprint-started") return;
+    const sp = byId.get(e.sprintId);
+    for (const dep of sp?.needs ?? []) {
+      const depDone = ledger.findIndex((x, xi) => xi < i && x.type === "sprint-done" && x.sprintId === dep);
+      if (depDone === -1) failures.push(`ordering: sprint ${e.sprintId} started before its dependency ${dep} was done`);
+    }
+  });
+
   return { ok: failures.length === 0, failures };
 }
 

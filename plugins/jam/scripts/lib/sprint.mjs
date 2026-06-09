@@ -20,6 +20,12 @@ export function startSprint({ runDir: dir, sprintId, now }) {
   if (!["planned", "promoted"].includes(sprint.provenance)) {
     throw new Error(`sprint ${sprintId} has no valid provenance (planned|promoted) — scope must be planned or promoted`);
   }
+  const allSprints = state.plan?.sprints ?? [];
+  const unmet = (sprint.needs ?? []).filter((n) => {
+    const dep = allSprints.find((s) => s.id === n);
+    return !dep || dep.status !== "done";
+  });
+  if (unmet.length) throw new Error(`sprint ${sprintId} blocked: needs ${unmet.join(", ")} (not done)`);
   sprint.status = "in-progress";
   addGate(state, sprintGateId(sprintId), "auto");
   writeState(dir, state);

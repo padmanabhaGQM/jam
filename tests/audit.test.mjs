@@ -100,6 +100,32 @@ test("a promoted sprint WITH a decision + ledger trail passes provenance", () =>
   assert.equal(evaluateAudit({ ledger, state, transcriptExists: yes }).ok, true);
 });
 
+test("audit fails when a sprint started before its dependency was done", () => {
+  const l = [
+    { type: "sprint-started", sprintId: "a" },
+    { type: "sprint-started", sprintId: "b" },   // b starts before a is done
+    { type: "sprint-done", sprintId: "a" },
+  ];
+  const state = { plan: { sprints: [
+    { id: "a", title: "t", status: "done", provenance: "planned", needs: [] },
+    { id: "b", title: "t", status: "in-progress", provenance: "planned", needs: ["a"] },
+  ] } };
+  assert.match(evaluateAudit({ ledger: l, state, transcriptExists: yes }).failures.join(" | "), /sprint b started before its dependency a was done/);
+});
+
+test("audit passes when a dependency was done before the dependent started", () => {
+  const l = [
+    { type: "sprint-started", sprintId: "a" },
+    { type: "sprint-done", sprintId: "a" },
+    { type: "sprint-started", sprintId: "b" },
+  ];
+  const state = { plan: { sprints: [
+    { id: "a", title: "t", status: "done", provenance: "planned", needs: [] },
+    { id: "b", title: "t", status: "in-progress", provenance: "planned", needs: ["a"] },
+  ] } };
+  assert.doesNotMatch(evaluateAudit({ ledger: l, state, transcriptExists: yes }).failures.join(" | "), /started before its dependency/);
+});
+
 test("auditRun reads a real run dir: PASS with a real transcript, FAIL without", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "jam-audit-"));
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });

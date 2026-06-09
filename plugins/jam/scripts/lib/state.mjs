@@ -59,6 +59,9 @@ export function validateState(state) {
     if ("provenance" in sp && !["planned", "promoted"].includes(sp.provenance)) {
       errors.push(`sprint ${sp.id}: provenance must be "planned" or "promoted"`);
     }
+    if ("needs" in sp && (!Array.isArray(sp.needs) || sp.needs.some((n) => typeof n !== "string"))) {
+      errors.push(`sprint ${sp.id}: needs must be an array of sprint ids`);
+    }
     if (sp.status === "done" && !(sp.codexSessions ?? []).length) {
       errors.push(`sprint ${sp.id}: status is done but has no bound Codex session`);
     }
