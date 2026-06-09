@@ -52,3 +52,21 @@ test("without a --sprint binding, --done is blocked even though verifyCmd passes
   jam(root, ["sprint", "fix-1", "--verify"]);
   assert.notEqual(jam(root, ["sprint", "fix-1", "--done"]).status, 0);
 });
+
+test("codex-resume --sprint binds using the positional session id even when the resume turn emits no thread.started", () => {
+  const root = tmp();
+  const codexHome = tmp();
+  const sid = "resume-sess-1";
+  const sessDir = path.join(codexHome, "sessions");
+  fs.mkdirSync(sessDir, { recursive: true });
+  fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), "{}\n");
+  const env = { JAM_CODEX_BIN: FAKE, CODEX_HOME: codexHome, JAM_FAKE_NO_THREAD_STARTED: "1" };
+  toImplement(root);
+  jam(root, ["sprint", "fix-1", "--start"]);
+  const pf = path.join(root, "reply.md");
+  fs.writeFileSync(pf, "continue");
+  const run = jam(root, ["codex-resume", sid, "--sprint", "fix-1", "--prompt-file", pf, "--out-dir", path.join(root, "cx")], env);
+  assert.match(run.stdout, new RegExp(`bound session ${sid} to sprint fix-1`));
+  jam(root, ["sprint", "fix-1", "--verify"]);
+  assert.equal(jam(root, ["sprint", "fix-1", "--done"]).status, 0);
+});

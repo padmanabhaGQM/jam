@@ -205,6 +205,22 @@ function cmdAdvance(cwd) {
   process.stdout.write(`advanced to phase ${state.phase}\n`);
 }
 
+function maybeBindSprint({ cwd, flags, status, sessionId }) {
+  if (!("sprint" in flags) || !flags.sprint) return;
+  if (status !== "completed") {
+    process.stdout.write(`not bound (turn did not complete; nothing to bind)\n`);
+    return;
+  }
+  if (!sessionId) {
+    process.stdout.write(`not bound: could not resolve a Codex session id for sprint ${flags.sprint}\n`);
+    return;
+  }
+  const { dir } = requireActiveRun(cwd);
+  const transcriptPath = locateTranscript(sessionId) ?? null;
+  bindCodexSession({ runDir: dir, sprintId: flags.sprint, sessionId, transcriptPath });
+  process.stdout.write(`bound session ${sessionId} to sprint ${flags.sprint} (transcript: ${transcriptPath ?? "none"})\n`);
+}
+
 async function cmdCodexRun(cwd, positional, flags) {
   if (!flags["prompt-file"]) return fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>]");
   let prompt;
@@ -219,16 +235,7 @@ async function cmdCodexRun(cwd, positional, flags) {
   process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? "(none)"}\nout-dir: ${outDir}\n`);
   if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
   else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). Resume with: jam codex-resume ${r.sessionId ?? "<id>"} --prompt-file <reply>\n`);
-  if ("sprint" in flags && flags.sprint) {
-    if (r.status === "completed" && r.sessionId) {
-      const { dir } = requireActiveRun(cwd);
-      const transcriptPath = locateTranscript(r.sessionId) ?? null;
-      bindCodexSession({ runDir: dir, sprintId: flags.sprint, sessionId: r.sessionId, transcriptPath });
-      process.stdout.write(`bound session ${r.sessionId} to sprint ${flags.sprint} (transcript: ${transcriptPath ?? "none"})\n`);
-    } else {
-      process.stdout.write(`not bound (turn incomplete; nothing to bind)\n`);
-    }
-  }
+  maybeBindSprint({ cwd, flags, status: r.status, sessionId: r.sessionId });
 }
 
 async function cmdCodexResume(cwd, positional, flags) {
@@ -246,16 +253,7 @@ async function cmdCodexResume(cwd, positional, flags) {
   process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? sessionId}\nout-dir: ${outDir}\n`);
   if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
   else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed).\n`);
-  if ("sprint" in flags && flags.sprint) {
-    if (r.status === "completed" && r.sessionId) {
-      const { dir } = requireActiveRun(cwd);
-      const transcriptPath = locateTranscript(r.sessionId) ?? null;
-      bindCodexSession({ runDir: dir, sprintId: flags.sprint, sessionId: r.sessionId, transcriptPath });
-      process.stdout.write(`bound session ${r.sessionId} to sprint ${flags.sprint} (transcript: ${transcriptPath ?? "none"})\n`);
-    } else {
-      process.stdout.write(`not bound (turn incomplete; nothing to bind)\n`);
-    }
-  }
+  maybeBindSprint({ cwd, flags, status: r.status, sessionId: r.sessionId ?? sessionId });
 }
 
 function cmdCodexStatus(cwd, positional, flags) {
