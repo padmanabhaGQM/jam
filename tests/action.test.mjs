@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createRun } from "../plugins/jam/scripts/lib/actions.mjs";
+import { createRun, recordApproval } from "../plugins/jam/scripts/lib/actions.mjs";
 import { readState, validateState } from "../plugins/jam/scripts/lib/state.mjs";
 import { readLedger } from "../plugins/jam/scripts/lib/ledger.mjs";
 import { proposeAction, ratifyAction } from "../plugins/jam/scripts/lib/action.mjs";
@@ -60,4 +60,13 @@ test("validateState value-checks actions; ratified is a valid gate status", () =
   assert.ok(validateState(s).some((e) => /action/.test(e)));
   s.actions = "nope";
   assert.ok(validateState(s).some((e) => /actions must be an array/.test(e)));
+});
+
+test("an irreversible action gate cannot be opened by /jam:approve, and the refusal names ratify (honest message)", () => {
+  const dir = run();
+  proposeAction({ runDir: dir, id: "del-1", type: "delete-path", now: "t1" });
+  assert.throws(
+    () => recordApproval({ runDir: dir, gateId: "action-del-1", who: "user", now: "t2" }),
+    /not ratified|jam ratify/,
+  );
 });

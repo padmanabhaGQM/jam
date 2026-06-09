@@ -13,6 +13,22 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
 - **Never hand-edit `state.json`.** All state writes go through the `jam` CLI (`diagnose`, `render-digest`, `approve`, `verify`, `advance`).
 - **Both agents use their superpowers skills.** `buildGroundingPrompt` instructs Codex to use `superpowers:systematic-debugging`; `buildAdversarialPrompt` instructs it to use `superpowers:verification-before-completion`. Claude must invoke the same skills locally.
 - **Claude = brain, Codex = independent adversary.** Never let Claude grade its own diagnosis; the adversarial pass must come from Codex, not Claude.
+- **Agent agreement is never authority for an irreversible action.** No consensus between Claude and Codex can authorize deleting a codebase, a force-push, a `DROP`, an infra-destroy, or a delete-and-restart. Irreversible actions are hard-blocked until the human types a ratification. See below.
+
+### Hard-block tier — irreversible actions
+
+For any consequential action (anything beyond editing files / running safe commands), declare it first:
+```
+jam propose-action <id> --type <type> [--target <path>] [--command <cmd>]
+```
+jam classifies it by reversibility. Reversible → proceed. **Irreversible** (`delete-path`, `git-history-rewrite`, `git-force-push`, `db-drop`, `destructive-migration`, `infra-destroy`, `deploy`, `send-external`, `restart-rearchitect`, or a destructive command like `rm -rf`, `git push --force`, `DROP TABLE`, `terraform destroy`) → **HARD-BLOCKED** behind a human ratification gate. It opens ONLY when the human types:
+```
+jam ratify <id> --confirm <id>     # grant (the phrase must equal the action id)
+jam ratify <id> --deny             # refuse
+```
+`/jam:approve` cannot open it. `jam cancel` (itself irreversible) requires `--confirm <runId>`. The FINISH audit refuses to pass while any irreversible action is still undecided.
+
+**Honest boundary:** this governs *declared* actions plus jam's own destructive ops — it does NOT yet intercept Codex's raw in-turn sandbox shell (the deferred **G0.5** slice). Until then, the orchestrator must declare consequential actions via `propose-action` rather than letting Codex run them unannounced.
 
 ---
 
