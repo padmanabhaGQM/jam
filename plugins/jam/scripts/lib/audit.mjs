@@ -49,6 +49,12 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     if (evIdx === -1) failures.push(`evidence: sprint-done ${S} has no preceding passing evidence (exit 0)`);
   });
 
+  for (const sp of sprints) {
+    if (sp.status === "done" && !ledger.some((x) => x.type === "sprint-done" && x.sprintId === sp.id)) {
+      failures.push(`consistency: sprint ${sp.id} is done in state but has no sprint-done ledger entry`);
+    }
+  }
+
   return { ok: failures.length === 0, failures };
 }
 

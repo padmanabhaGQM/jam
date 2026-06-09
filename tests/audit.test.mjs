@@ -77,6 +77,11 @@ test("sprint-done with no preceding passing evidence fails evidence", () => {
   assert.match(fails(l), /evidence/);
 });
 
+test("a sprint marked done in state with no sprint-done ledger entry fails consistency", () => {
+  const l = goodLedger().filter((e) => e.type !== "sprint-done"); // state still has fix-1 done; ledger no longer records it
+  assert.match(fails(l), /consistency: sprint fix-1 is done in state/);
+});
+
 test("auditRun reads a real run dir: PASS with a real transcript, FAIL without", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "jam-audit-"));
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
