@@ -12,7 +12,7 @@ function runWithSprint() {
   const dir = createRun({ projectRoot: tmp(), runId: "r1", mode: "repair", now: "t" });
   const s = readState(dir);
   s.phase = "IMPLEMENT";
-  s.plan = { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", acceptanceCriteria: "ac", status: "in-progress" }] };
+  s.plan = { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", acceptanceCriteria: "ac", status: "in-progress", provenance: "planned" }] };
   writeState(dir, s);
   return dir;
 }

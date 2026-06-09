@@ -207,6 +207,8 @@ State it plainly to the user: **a sprint cannot be `done` unless the global `ver
 
 Advancing to FINISH also runs the **run-honesty audit** (`jam audit`): it re-checks the ledger so far — phase order, that each approval was preceded by its producing digest/verdict/plan, and that every done sprint has a Codex-bound session with a live transcript and a passing evidence record — and refuses FINISH if the recorded process is inconsistent or forged. Run `jam audit` anytime to check a run's integrity.
 
+If implementation surfaces scope beyond the approved plan — a new sprint Codex or the diagnosis reveals — it must be **promoted**, never silently worked: `jam promote-sprint <id> --title <t> --reason <why>`. A promotion is recorded (provenance `promoted` + a `promotions` decision) and surfaced in `jam status`; `startSprint` refuses scope with no provenance and the FINISH audit refuses a `promoted` sprint with no decision trail. Promoting adds an undone sprint, so FINISH correctly waits for the new scope to be implemented, verified, and done.
+
 ---
 
 ## Codex-hang protocol (REQUIRED)

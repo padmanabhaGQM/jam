@@ -55,6 +55,18 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     }
   }
 
+  const promotions = state.promotions ?? [];
+  for (const sp of sprints) {
+    if (sp.status === "in-progress" || sp.status === "done") {
+      if (!["planned", "promoted"].includes(sp.provenance)) {
+        failures.push(`provenance: sprint ${sp.id} is ${sp.status} but has no valid provenance`);
+      } else if (sp.provenance === "promoted") {
+        if (!promotions.some((p) => p.id === sp.id)) failures.push(`provenance: promoted sprint ${sp.id} has no promotion decision`);
+        if (!ledger.some((x) => x.type === "sprint-promoted" && x.id === sp.id)) failures.push(`provenance: promoted sprint ${sp.id} has no sprint-promoted ledger entry`);
+      }
+    }
+  }
+
   return { ok: failures.length === 0, failures };
 }
 
