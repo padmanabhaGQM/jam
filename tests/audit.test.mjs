@@ -27,7 +27,7 @@ function goodLedger() {
   ];
 }
 function goodState() {
-  return { plan: { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", codexSessions: [{ sessionId: "s", transcriptPath: "/x/r.jsonl", at: "t" }] }] } };
+  return { plan: { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", provenance: "planned", codexSessions: [{ sessionId: "s", transcriptPath: "/x/r.jsonl", at: "t" }] }] } };
 }
 const yes = () => true;
 function fails(ledger, state = goodState(), te = yes) {
@@ -82,13 +82,31 @@ test("a sprint marked done in state with no sprint-done ledger entry fails consi
   assert.match(fails(l), /consistency: sprint fix-1 is done in state/);
 });
 
+test("a worked/done sprint with no provenance fails the audit", () => {
+  const state = { plan: { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", codexSessions: [{ sessionId: "s", transcriptPath: "/x/r.jsonl", at: "t" }] }] } };
+  assert.match(evaluateAudit({ ledger: goodLedger(), state, transcriptExists: yes }).failures.join(" | "), /provenance: sprint fix-1 is done but has no valid provenance/);
+});
+
+test("a promoted sprint with no decision / no ledger trail fails the audit", () => {
+  const state = { plan: { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", provenance: "promoted", codexSessions: [{ sessionId: "s", transcriptPath: "/x/r.jsonl", at: "t" }] }] } };
+  const f = evaluateAudit({ ledger: goodLedger(), state, transcriptExists: yes }).failures.join(" | ");
+  assert.match(f, /promoted sprint fix-1 has no promotion decision/);
+  assert.match(f, /promoted sprint fix-1 has no sprint-promoted ledger entry/);
+});
+
+test("a promoted sprint WITH a decision + ledger trail passes provenance", () => {
+  const ledger = [...goodLedger(), { type: "sprint-promoted", id: "fix-1", reason: "r" }];
+  const state = { plan: { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", provenance: "promoted", codexSessions: [{ sessionId: "s", transcriptPath: "/x/r.jsonl", at: "t" }] }] }, promotions: [{ id: "fix-1", discoveredBy: "orchestrator", reason: "r", decidedBy: "orchestrator", at: "t" }] };
+  assert.equal(evaluateAudit({ ledger, state, transcriptExists: yes }).ok, true);
+});
+
 test("auditRun reads a real run dir: PASS with a real transcript, FAIL without", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "jam-audit-"));
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
   const tp = path.join(root, "transcript.jsonl");
   fs.writeFileSync(tp, "{}\n");
   const s = readState(dir);
-  s.plan = { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", codexSessions: [{ sessionId: "s", transcriptPath: tp, at: "t" }] }] };
+  s.plan = { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", provenance: "planned", codexSessions: [{ sessionId: "s", transcriptPath: tp, at: "t" }] }] };
   writeState(dir, s);
   for (const e of goodLedger().slice(1)) appendLedger(dir, { at: "t", ...e });
   assert.equal(auditRun({ runDir: dir }).ok, true);

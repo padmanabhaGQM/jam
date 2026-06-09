@@ -52,6 +52,7 @@ test("IMPLEMENT advances to FINISH only when all sprints are done", () => {
   fs.writeFileSync(tp, "{}\n");
   const s2 = readState(dir);
   s2.plan.sprints[0].status = "done";
+  s2.plan.sprints[0].provenance = "planned";
   s2.plan.sprints[0].codexSessions = [{ sessionId: "s", transcriptPath: tp, at: "t" }];
   writeState(dir, s2);
   appendLedger(dir, { at: "t", type: "codex-bound", sprintId: "a", sessionId: "s" });
