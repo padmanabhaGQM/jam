@@ -56,6 +56,9 @@ export function validateState(state) {
         }
       }
     }
+    if (sp.status === "done" && !(sp.codexSessions ?? []).length) {
+      errors.push(`sprint ${sp.id}: status is done but has no bound Codex session`);
+    }
   }
   return errors;
 }

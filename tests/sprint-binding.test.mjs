@@ -50,3 +50,12 @@ test("validateState rejects malformed codexSessions, accepts well-formed and abs
   ok.plan.sprints[0].codexSessions = "nope";
   assert.ok(validateState(ok).length > 0);
 });
+
+test("validateState rejects a done sprint with no bound Codex session, accepts one with a binding", () => {
+  const dir = runWithSprint();
+  const s = readState(dir);
+  s.plan.sprints[0].status = "done";
+  assert.ok(validateState(s).some((e) => /done but has no bound Codex session/.test(e)));
+  s.plan.sprints[0].codexSessions = [{ sessionId: "x", transcriptPath: null, at: "t" }];
+  assert.equal(validateState(s).length, 0);
+});

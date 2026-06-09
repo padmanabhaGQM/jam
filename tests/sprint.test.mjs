@@ -93,7 +93,7 @@ test("allSprintsDone is false when only some sprints are done, and when there is
   const { dir } = runAtImplement("true");
   const s = readState(dir);
   s.plan.sprints = [
-    { id: "a", title: "t", status: "done" },
+    { id: "a", title: "t", status: "done", codexSessions: [{ sessionId: "s", transcriptPath: null, at: "t" }] },
     { id: "b", title: "t", status: "pending" }
   ];
   writeState(dir, s);
