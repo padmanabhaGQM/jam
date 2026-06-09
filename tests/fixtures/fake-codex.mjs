@@ -23,7 +23,9 @@ if (mode === "malformed") {
   process.exit(0);
 }
 
-emit({ type: "thread.started", thread_id: sessionId });
+if (!(isResume && process.env.JAM_FAKE_NO_THREAD_STARTED === "1")) {
+  emit({ type: "thread.started", thread_id: sessionId });
+}
 
 if (mode === "interrupt") {
   process.exit(1); // mid-turn exit: no turn.completed, no last message

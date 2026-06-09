@@ -47,7 +47,7 @@ test("IMPLEMENT advances to FINISH only when all sprints are done", () => {
   s.plan = { verifyCmd: "true", sprints: [{ id: "a", title: "t", status: "pending" }] };
   writeState(dir, s);
   assert.throws(() => advanceRun({ runDir: dir, now: "t1" }), /not all sprints done/);
-  const s2 = readState(dir); s2.plan.sprints[0].status = "done"; writeState(dir, s2);
+  const s2 = readState(dir); s2.plan.sprints[0].status = "done"; s2.plan.sprints[0].codexSessions = [{ sessionId: "s", transcriptPath: null, at: "t" }]; writeState(dir, s2);
   advanceRun({ runDir: dir, now: "t2" });
   assert.equal(readState(dir).phase, "FINISH");
 });

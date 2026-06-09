@@ -162,7 +162,7 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
 
 ## IMPLEMENT phase
 
-Work the sprint list **one at a time, in order**. Each sprint is gated by the run's **global `verifyCmd`** — jam runs it itself and a sprint cannot be marked `done` unless it exits 0. Because `verifyCmd` is the *whole project's* acceptance command (validators + reviewer scores), **no sprint completes until the global gate passes** — the anti-local-fix property: local green is never enough.
+Work the sprint list **one at a time, in order**. Each sprint is gated by the run's **global `verifyCmd`** — jam runs it itself and a sprint cannot be marked `done` unless it exits 0. Because `verifyCmd` is the *whole project's* acceptance command (validators + reviewer scores), **no sprint completes until the global gate passes** — the anti-local-fix property: local green is never enough. A sprint also cannot be marked `done` unless a **Codex session authored it** — a bound session with a locatable transcript. That is enforced by `finishSprint` (machinery, not prose): Claude must not write the implementation.
 
 ### Per sprint, in order
 
@@ -176,11 +176,12 @@ Work the sprint list **one at a time, in order**. Each sprint is gated by the ru
    Write the full text produced by `buildSprintPrompt({ sprint, goal, directives })` from `lib/prompting.mjs` to a file, then run the turn:
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" codex-run \
+     --sprint <id> \
      --prompt-file <run>/codex/<id>/prompt.md \
      --timeout 600000 \
      --out-dir <run>/codex/<id>
    ```
-   `buildSprintPrompt` instructs Codex to use `superpowers:test-driven-development`, implement **exactly** this sprint, honor active steering directives, and return exact evidence. Resume with `jam codex-resume <sessionId>` as needed. The **Codex-hang protocol** (never-kill + live-thread reconciliation) applies to every engine call here.
+   `buildSprintPrompt` instructs Codex to use `superpowers:test-driven-development`, implement **exactly** this sprint, honor active steering directives, and return exact evidence. Passing `--sprint <id>` binds this Codex session (id + transcript) to the sprint — the authorship record step 5 requires. Resume with `jam codex-resume <sessionId> --sprint <id>` as needed. The **Codex-hang protocol** (never-kill + live-thread reconciliation) applies to every engine call here.
 
 3. **Verify against the global gate.**
    ```bash
@@ -195,7 +196,7 @@ Work the sprint list **one at a time, in order**. Each sprint is gated by the ru
    ```bash
    jam sprint <id> --done
    ```
-   Refuses unless the sprint is verified (global `verifyCmd` exited 0). This is the user's sign-off to close the sprint.
+   Refuses unless the sprint is verified (global `verifyCmd` exited 0) **and** a Codex session authored it (a bound session with a locatable transcript). This is the user's sign-off to close the sprint.
 
 6. **Next sprint.** Repeat 1–5 for each. When all sprints are `done`:
    ```bash

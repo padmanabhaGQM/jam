@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { readState, writeState, addGate } from "./state.mjs";
 import { recordEvidence } from "./actions.mjs";
 import { appendLedger } from "./ledger.mjs";
@@ -32,6 +33,17 @@ export function verifySprint({ runDir: dir, sprintId, cwd, now }) {
   return recordEvidence({ runDir: dir, gateId: sprintGateId(sprintId), sprintId, command: verifyCmd, cwd, now });
 }
 
+export function bindCodexSession({ runDir: dir, sprintId, sessionId, transcriptPath, now }) {
+  const state = readState(dir);
+  const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
+  if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
+  sprint.codexSessions = sprint.codexSessions ?? [];
+  sprint.codexSessions.push({ sessionId, transcriptPath: transcriptPath ?? null, at: nowIso(now) });
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "codex-bound", sprintId, sessionId });
+  return state;
+}
+
 export function finishSprint({ runDir: dir, sprintId, now }) {
   const state = readState(dir);
   const gate = state.gates[sprintGateId(sprintId)];
@@ -40,6 +52,10 @@ export function finishSprint({ runDir: dir, sprintId, now }) {
   }
   const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
   if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
+  const authored = (sprint.codexSessions ?? []).some((s) => !!s.transcriptPath && fs.existsSync(s.transcriptPath));
+  if (!authored) {
+    throw new Error(`sprint ${sprintId} has no Codex-authored session (a bound session with a locatable transcript) — implementation must come from Codex`);
+  }
   sprint.status = "done";
   writeState(dir, state);
   appendLedger(dir, { at: nowIso(now), type: "sprint-done", sprintId });

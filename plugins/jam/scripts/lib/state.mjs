@@ -32,15 +32,40 @@ export function createInitialState({ runId, topic, now, mode }) {
 }
 
 export function validateState(state) {
-  if (!state || typeof state !== "object") throw new Error("state must be an object");
+  const errors = [];
+  if (!state || typeof state !== "object") {
+    errors.push("state must be an object");
+    return errors;
+  }
   for (const k of ["runId", "phase", "gates", "dial", "createdAt"]) {
-    if (!(k in state)) throw new Error(`state missing required field: ${k}`);
+    if (!(k in state)) errors.push(`state missing required field: ${k}`);
   }
-  for (const [id, g] of Object.entries(state.gates)) {
-    if (!VALID_MODES.includes(g.mode)) throw new Error(`gate ${id}: invalid mode ${g.mode}`);
-    if (!VALID_STATUSES.includes(g.status)) throw new Error(`gate ${id}: invalid status ${g.status}`);
+  for (const [id, g] of Object.entries(state.gates ?? {})) {
+    if (!VALID_MODES.includes(g.mode)) errors.push(`gate ${id}: invalid mode ${g.mode}`);
+    if (!VALID_STATUSES.includes(g.status)) errors.push(`gate ${id}: invalid status ${g.status}`);
   }
-  return true;
+  for (const sp of state.plan?.sprints ?? []) {
+    if ("codexSessions" in sp) {
+      if (!Array.isArray(sp.codexSessions)) {
+        errors.push(`sprint ${sp.id}: codexSessions must be an array`);
+      } else {
+        for (const cs of sp.codexSessions) {
+          if (!cs || typeof cs.sessionId !== "string" || typeof cs.at !== "string") {
+            errors.push(`sprint ${sp.id}: each codexSession needs string sessionId and at`);
+          }
+        }
+      }
+    }
+    if (sp.status === "done" && !(sp.codexSessions ?? []).length) {
+      errors.push(`sprint ${sp.id}: status is done but has no bound Codex session`);
+    }
+  }
+  return errors;
+}
+
+function assertValidState(state) {
+  const errors = validateState(state);
+  if (errors.length > 0) throw new Error(errors.join("; "));
 }
 
 export function statePath(dir) {
@@ -51,12 +76,12 @@ export function readState(dir) {
   const p = statePath(dir);
   if (!fs.existsSync(p)) throw new Error(`no run state at ${p}`);
   const state = JSON.parse(fs.readFileSync(p, "utf8"));
-  validateState(state);
+  assertValidState(state);
   return state;
 }
 
 export function writeState(dir, state) {
-  validateState(state);
+  assertValidState(state);
   fs.mkdirSync(dir, { recursive: true });
   const p = statePath(dir);
   const tmp = `${p}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;

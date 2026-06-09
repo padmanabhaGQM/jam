@@ -8,7 +8,7 @@
 
 The governing principle is **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — hooks, on-disk state, evidence scripts, schemas — that the models cannot talk past.
 
-> **Status: pre-alpha (full gated repair loop: diagnose → verify → plan → implement → finish).** jam runs the whole repair loop over its own recoverable Codex engine; each implementation sprint is gated by the project's global `verifyCmd` — no sprint completes until the whole acceptance gate passes. Real-codex live smoke + a real `verify.sh` are the remaining validation step before production use.
+> **Status: pre-alpha (full gated repair loop: diagnose → verify → plan → implement → finish).** jam runs the whole repair loop over its own recoverable Codex engine; each implementation sprint is gated by the project's global `verifyCmd` **and by Codex authorship** — a sprint cannot complete unless the whole acceptance gate passes and a real Codex session (with a locatable transcript) authored it. Real-codex live smoke + a real `verify.sh` are the remaining validation step before production use.
 
 ## What it does (when built)
 
@@ -88,9 +88,9 @@ jam approve PLAN && jam advance    # → IMPLEMENT
 ```bash
 # at IMPLEMENT, per sprint:
 jam sprint fix-1 --start
-# orchestrator: codex-run (write-capable) implements the sprint via the engine
+jam codex-run --sprint fix-1 --prompt-file p.md --out-dir .jam/codex/fix-1  # Codex implements; binds the session+transcript to the sprint
 jam sprint fix-1 --verify     # jam runs the GLOBAL verifyCmd; passes only on exit 0
-jam sprint fix-1 --done       # refuses unless verified — the human go/no-go
+jam sprint fix-1 --done       # refuses unless verified AND a Codex session authored it
 jam advance                    # → FINISH when ALL sprints are done
 ```
 

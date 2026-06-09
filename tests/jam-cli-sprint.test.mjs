@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { readActiveRunId, runDir } from "../plugins/jam/scripts/lib/paths.mjs";
+import { bindCodexSession } from "../plugins/jam/scripts/lib/sprint.mjs";
 
 const CLI = fileURLToPath(new URL("../plugins/jam/scripts/jam.mjs", import.meta.url));
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), "jam-csprint-")); }
@@ -32,6 +34,10 @@ test("a sprint can be driven start→verify→done and the run advances to FINIS
   const v = jam(root, ["sprint", "fix-1", "--verify"]);
   assert.equal(v.status, 0);
   assert.match(v.stdout, /exit 0/);
+  const _rid = readActiveRunId(root);
+  const _tp = path.join(root, "transcript.jsonl");
+  fs.writeFileSync(_tp, "{}\n");
+  bindCodexSession({ runDir: runDir(root, _rid), sprintId: "fix-1", sessionId: "s", transcriptPath: _tp });
   assert.equal(jam(root, ["sprint", "fix-1", "--done"]).status, 0);
   assert.equal(jam(root, ["advance"]).status, 0);
   assert.match(jam(root, ["status"]).stdout, /phase FINISH/);
