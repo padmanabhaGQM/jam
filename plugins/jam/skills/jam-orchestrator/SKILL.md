@@ -1,9 +1,9 @@
 ---
 name: jam-orchestrator
-description: Use to run a jam repair-mode loop — the gated DIAGNOSE→VERIFY phase engine that orchestrates Claude (systematic-debugging, brain) and Codex (independent grounding + adversarial refutation, adversary) and refuses to release a diagnosis to planning until an adversarial pass fails to break it. Invoked by /jam:diagnose.
+description: Use to run a jam repair-mode loop — the gated DIAGNOSE→VERIFY→PLAN→IMPLEMENT repair engine that orchestrates Claude (brain) and Codex (independent adversary/hands) and refuses to release work past each gate until the controls are satisfied. Invoked by /jam:diagnose.
 ---
 
-# jam orchestrator — DIAGNOSE → VERIFY
+# jam orchestrator — DIAGNOSE → VERIFY → PLAN → IMPLEMENT
 
 You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the brain** (root-cause analysis, digest assembly, gate management); **Codex is the independent adversary/grounder** (parallel diagnosis via jam's own codex engine, adversarial refutation via `/codex:adversarial-review`); **the user supervises and approves each gate.**
 
@@ -120,7 +120,7 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
    Once `jam verify` confirms no blockers:
    ```
    /jam:approve VERIFY
-   jam advance   # → PLAN (Slice 2b-2 boundary; stop here)
+   jam advance   # → PLAN
    ```
 
 ---
@@ -155,8 +155,54 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
 5. **Approve + advance to IMPLEMENT.**
    ```bash
    /jam:approve PLAN
-   jam advance   # → IMPLEMENT (M3b boundary — stop here; the gated implement loop is the next slice)
+   jam advance   # → IMPLEMENT
    ```
+
+---
+
+## IMPLEMENT phase
+
+Work the sprint list **one at a time, in order**. Each sprint is gated by the run's **global `verifyCmd`** — jam runs it itself and a sprint cannot be marked `done` unless it exits 0. Because `verifyCmd` is the *whole project's* acceptance command (validators + reviewer scores), **no sprint completes until the global gate passes** — the anti-local-fix property: local green is never enough.
+
+### Per sprint, in order
+
+1. **Start the sprint.**
+   ```bash
+   jam sprint <id> --start
+   ```
+   Marks it `in-progress` and seeds its auto gate.
+
+2. **Implement via the engine (Codex, write-capable).**
+   Write the full text produced by `buildSprintPrompt({ sprint, goal, directives })` from `lib/prompting.mjs` to a file, then run the turn:
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" codex-run \
+     --prompt-file <run>/codex/<id>/prompt.md \
+     --timeout 600000 \
+     --out-dir <run>/codex/<id>
+   ```
+   `buildSprintPrompt` instructs Codex to use `superpowers:test-driven-development`, implement **exactly** this sprint, honor active steering directives, and return exact evidence. Resume with `jam codex-resume <sessionId>` as needed. The **Codex-hang protocol** (never-kill + live-thread reconciliation) applies to every engine call here.
+
+3. **Verify against the global gate.**
+   ```bash
+   jam sprint <id> --verify
+   ```
+   jam runs the **global `verifyCmd`**; the sprint passes only on exit 0. If it fails, do not force — iterate (more `codex-run` on the same thread) or take a `/jam:steer` directive, then re-verify.
+
+4. **Second, non-author check + digest.**
+   Run `/codex:adversarial-review` on the diff (an independent read of the change). Render a digest and surface it to the user.
+
+5. **Human go/no-go.**
+   ```bash
+   jam sprint <id> --done
+   ```
+   Refuses unless the sprint is verified (global `verifyCmd` exited 0). This is the user's sign-off to close the sprint.
+
+6. **Next sprint.** Repeat 1–5 for each. When all sprints are `done`:
+   ```bash
+   jam advance   # → FINISH (refuses unless ALL sprints are done)
+   ```
+
+State it plainly to the user: **a sprint cannot be `done` unless the global `verifyCmd` passes — local green is not enough.** That is what structurally ends the locally-correct-globally-broken loop.
 
 ---
 
@@ -194,8 +240,7 @@ If the user runs `/jam:steer "<directive>"` at any point, that directive is writ
 ## Phase order (repair mode)
 
 ```
-DIAGNOSE → VERIFY → PLAN → IMPLEMENT
-                              ↑ (M3b — gated implement loop; next slice)
+DIAGNOSE → VERIFY → PLAN → IMPLEMENT → FINISH
 ```
 
-This skill covers DIAGNOSE, VERIFY, and PLAN. Stop at `jam advance` → IMPLEMENT and hand off to the next slice.
+This skill covers the full repair loop: DIAGNOSE, VERIFY, PLAN, IMPLEMENT, and the advance to FINISH.

@@ -39,9 +39,22 @@ test("DIAGNOSE→VERIFY→PLAN advances only as gates pass", () => {
   assert.ok(readState(dir).gates.PLAN);
 });
 
-test("advancing from the final phase (IMPLEMENT) reports already-final, not a gate error", () => {
+test("IMPLEMENT advances to FINISH only when all sprints are done", () => {
   const root = tmp();
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
-  const s = readState(dir); s.phase = "IMPLEMENT"; writeState(dir, s);
+  const s = readState(dir);
+  s.phase = "IMPLEMENT";
+  s.plan = { verifyCmd: "true", sprints: [{ id: "a", title: "t", status: "pending" }] };
+  writeState(dir, s);
+  assert.throws(() => advanceRun({ runDir: dir, now: "t1" }), /not all sprints done/);
+  const s2 = readState(dir); s2.plan.sprints[0].status = "done"; writeState(dir, s2);
+  advanceRun({ runDir: dir, now: "t2" });
+  assert.equal(readState(dir).phase, "FINISH");
+});
+
+test("advancing from FINISH (terminal) reports already-final", () => {
+  const root = tmp();
+  const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
+  const s = readState(dir); s.phase = "FINISH"; writeState(dir, s);
   assert.throws(() => advanceRun({ runDir: dir, now: "t1" }), /already at the final repair phase/);
 });

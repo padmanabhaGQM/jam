@@ -18,6 +18,7 @@ import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan } from "./lib/plan.mjs";
+import { startSprint, verifySprint, finishSprint } from "./lib/sprint.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -241,6 +242,30 @@ function cmdCodexStatus(cwd, positional, flags) {
   process.stdout.write(`turn: ${status}\nsession: ${sessionId ?? "(none)"}\ntranscript: ${transcript ?? "(not found)"}\n`);
 }
 
+function cmdSprint(cwd, positional, flags) {
+  const id = positional[0];
+  if (!id) return fail("usage: jam sprint <id> --start|--verify|--done");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    if ("start" in flags) {
+      startSprint({ runDir: dir, sprintId: id });
+      process.stdout.write(`sprint ${id}: in-progress\n`);
+    } else if ("verify" in flags) {
+      // Always exits 0; the verifyCmd's exit code is reported in stdout and recorded in the gate.
+      // The gate (not this process's exit code) is what blocks --done. Check stdout / `jam status`.
+      const { result } = verifySprint({ runDir: dir, sprintId: id, cwd });
+      process.stdout.write(`sprint ${id} verify: exit ${result.exitCode}\n`);
+    } else if ("done" in flags) {
+      finishSprint({ runDir: dir, sprintId: id });
+      process.stdout.write(`sprint ${id}: done\n`);
+    } else {
+      return fail("usage: jam sprint <id> --start|--verify|--done");
+    }
+  } catch (e) {
+    return fail(e.message);
+  }
+}
+
 function cmdPlan(cwd, positional, flags) {
   if (!flags.file) return fail("usage: jam plan --file <plan.json>");
   const { dir } = requireActiveRun(cwd);
@@ -287,6 +312,8 @@ async function main() {
       return cmdCodexStatus(cwd, positional, flags);
     case "plan":
       return cmdPlan(cwd, positional, flags);
+    case "sprint":
+      return cmdSprint(cwd, positional, flags);
     default:
       return fail(`unknown subcommand: ${sub ?? "(none)"}`);
   }
