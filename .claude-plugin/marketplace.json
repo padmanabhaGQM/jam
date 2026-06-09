@@ -5,16 +5,18 @@
   },
   "metadata": {
     "description": "Neel's Claude Code plugins.",
-    "version": "0.0.1"
+    "version": "0.11.0"
   },
   "plugins": [
     {
       "name": "jam",
-      "description": "Honest, controlled Claude–Codex build loop. Claude is the brain (architect/planner/reviewer), Codex is the hands (implementer), enforced by a deterministic control surface.",
-      "version": "0.5.0",
+      "description": "Honest, controlled Claude–Codex build loop. Claude is the brain (diagnose/plan/review), Codex is the hands (implement), enforced by a deterministic control surface (gates, evidence, ledger, run-honesty audit, scope governance, sprint DAG, irreversible-action hard-block).",
+      "version": "0.11.0",
       "author": {
         "name": "Padmanabha Banerjee (Neel)"
       },
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/padmanabhaGQM/jam",
       "source": "./plugins/jam"
     }
   ]

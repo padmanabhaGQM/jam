@@ -17,3 +17,6 @@ docs/superpowers/loop-runs/
 # Test/coverage artifacts
 coverage/
 *.tmp
+
+# stray test output
+test-output.txt
