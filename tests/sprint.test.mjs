@@ -50,8 +50,10 @@ test("finishSprint refuses unless verified; marks done when verified", () => {
   startSprint({ runDir: dir, sprintId: "fix-1" });
   assert.throws(() => finishSprint({ runDir: dir, sprintId: "fix-1" }), /not verified/);
   verifySprint({ runDir: dir, sprintId: "fix-1", cwd: root });
-  bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "s", transcriptPath: "/x/r.jsonl" });
-  finishSprint({ runDir: dir, sprintId: "fix-1", transcriptExists: () => true });
+  const tp = path.join(root, "r.jsonl");
+  fs.writeFileSync(tp, "{}\n");
+  bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "s", transcriptPath: tp });
+  finishSprint({ runDir: dir, sprintId: "fix-1" });
   assert.equal(readState(dir).plan.sprints[0].status, "done");
   assert.equal(allSprintsDone(readState(dir)), true);
 });
@@ -60,24 +62,26 @@ test("finishSprint refuses a verified sprint that has NO Codex session", () => {
   const { root, dir } = runAtImplement("true");
   startSprint({ runDir: dir, sprintId: "fix-1" });
   verifySprint({ runDir: dir, sprintId: "fix-1", cwd: root });
-  assert.throws(() => finishSprint({ runDir: dir, sprintId: "fix-1", transcriptExists: () => true }), /no Codex-authored session/);
+  assert.throws(() => finishSprint({ runDir: dir, sprintId: "fix-1" }), /no Codex-authored session/);
 });
 
-test("finishSprint marks done when verified AND a bound session has an existing transcript", () => {
+test("finishSprint marks done when verified AND a bound session has an existing transcript on disk", () => {
   const { root, dir } = runAtImplement("true");
   startSprint({ runDir: dir, sprintId: "fix-1" });
   verifySprint({ runDir: dir, sprintId: "fix-1", cwd: root });
-  bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "s", transcriptPath: "/x/rollout-s.jsonl" });
-  finishSprint({ runDir: dir, sprintId: "fix-1", transcriptExists: () => true });
+  const tp = path.join(root, "real-transcript.jsonl");
+  fs.writeFileSync(tp, "{}\n");
+  bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "s", transcriptPath: tp });
+  finishSprint({ runDir: dir, sprintId: "fix-1" });
   assert.equal(readState(dir).plan.sprints[0].status, "done");
 });
 
-test("finishSprint refuses when the bound session's transcript does NOT exist", () => {
+test("finishSprint refuses when the bound session's transcript does NOT exist on disk", () => {
   const { root, dir } = runAtImplement("true");
   startSprint({ runDir: dir, sprintId: "fix-1" });
   verifySprint({ runDir: dir, sprintId: "fix-1", cwd: root });
-  bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "s", transcriptPath: "/x/missing.jsonl" });
-  assert.throws(() => finishSprint({ runDir: dir, sprintId: "fix-1", transcriptExists: () => false }), /no Codex-authored session/);
+  bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "s", transcriptPath: path.join(root, "missing.jsonl") });
+  assert.throws(() => finishSprint({ runDir: dir, sprintId: "fix-1" }), /no Codex-authored session/);
 });
 
 test("allSprintsDone is false with no plan or any non-done sprint", () => {

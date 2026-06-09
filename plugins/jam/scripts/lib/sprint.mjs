@@ -44,7 +44,7 @@ export function bindCodexSession({ runDir: dir, sprintId, sessionId, transcriptP
   return state;
 }
 
-export function finishSprint({ runDir: dir, sprintId, now, transcriptExists }) {
+export function finishSprint({ runDir: dir, sprintId, now }) {
   const state = readState(dir);
   const gate = state.gates[sprintGateId(sprintId)];
   if (!gate || gate.status !== "evidence-passed") {
@@ -52,8 +52,7 @@ export function finishSprint({ runDir: dir, sprintId, now, transcriptExists }) {
   }
   const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
   if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
-  const exists = transcriptExists ?? ((p) => !!p && fs.existsSync(p));
-  const authored = (sprint.codexSessions ?? []).some((s) => exists(s.transcriptPath));
+  const authored = (sprint.codexSessions ?? []).some((s) => !!s.transcriptPath && fs.existsSync(s.transcriptPath));
   if (!authored) {
     throw new Error(`sprint ${sprintId} has no Codex-authored session (a bound session with a locatable transcript) — implementation must come from Codex`);
   }
