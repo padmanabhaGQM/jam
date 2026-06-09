@@ -17,7 +17,7 @@ import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from
 import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { advanceRun } from "./lib/phases.mjs";
-import { recordPlan } from "./lib/plan.mjs";
+import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession } from "./lib/sprint.mjs";
 import { auditRun } from "./lib/audit.mjs";
 
@@ -78,10 +78,13 @@ function cmdStatus(cwd) {
   if (state.plan) {
     lines.push(`  verify: ${state.plan.verifyCmd}`);
     for (const sp of state.plan.sprints) {
-      lines.push(`  sprint ${sp.id}: ${sp.status} — ${sp.title}`);
+      lines.push(`  sprint ${sp.id}: ${sp.status} [${sp.provenance ?? "?"}] — ${sp.title}`);
       for (const cs of sp.codexSessions ?? []) {
         lines.push(`      codex: ${cs.sessionId} (${cs.transcriptPath ? "transcript" : "no-transcript"})`);
       }
+    }
+    for (const p of state.promotions ?? []) {
+      lines.push(`  promotion ${p.id}: ${p.reason} (by ${p.discoveredBy})`);
     }
   }
   process.stdout.write(lines.join("\n") + "\n");
@@ -300,6 +303,16 @@ function cmdPlan(cwd, positional, flags) {
   process.stdout.write(`plan recorded: ${state.plan.sprints.length} sprint(s); verify: ${state.plan.verifyCmd}\n`);
 }
 
+function cmdPromoteSprint(cwd, positional, flags) {
+  const id = positional[0];
+  if (!id || !flags.title || !flags.reason) return fail("usage: jam promote-sprint <id> --title <t> --reason <r> [--acceptance <a>] [--discovered-by <d>]");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    promoteSprint({ runDir: dir, id, title: flags.title, acceptanceCriteria: flags.acceptance, discoveredBy: flags["discovered-by"], reason: flags.reason });
+    process.stdout.write(`promoted sprint ${id} (provenance: promoted)\n`);
+  } catch (e) { return fail(e.message); }
+}
+
 function cmdAudit(cwd) {
   const { dir } = requireActiveRun(cwd);
   const { ok, failures } = auditRun({ runDir: dir });
@@ -343,6 +356,8 @@ async function main() {
       return cmdCodexStatus(cwd, positional, flags);
     case "plan":
       return cmdPlan(cwd, positional, flags);
+    case "promote-sprint":
+      return cmdPromoteSprint(cwd, positional, flags);
     case "sprint":
       return cmdSprint(cwd, positional, flags);
     case "audit":
