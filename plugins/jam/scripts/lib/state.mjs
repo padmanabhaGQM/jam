@@ -40,7 +40,26 @@ export function validateState(state) {
     if (!VALID_MODES.includes(g.mode)) throw new Error(`gate ${id}: invalid mode ${g.mode}`);
     if (!VALID_STATUSES.includes(g.status)) throw new Error(`gate ${id}: invalid status ${g.status}`);
   }
-  return true;
+  const errors = [];
+  for (const sp of state.plan?.sprints ?? []) {
+    if ("codexSessions" in sp) {
+      if (!Array.isArray(sp.codexSessions)) {
+        errors.push(`sprint ${sp.id}: codexSessions must be an array`);
+      } else {
+        for (const cs of sp.codexSessions) {
+          if (!cs || typeof cs.sessionId !== "string" || typeof cs.at !== "string") {
+            errors.push(`sprint ${sp.id}: each codexSession needs string sessionId and at`);
+          }
+        }
+      }
+    }
+  }
+  return errors;
+}
+
+function assertValidState(state) {
+  const errors = validateState(state);
+  if (errors.length > 0) throw new Error(errors.join("; "));
 }
 
 export function statePath(dir) {
@@ -51,12 +70,12 @@ export function readState(dir) {
   const p = statePath(dir);
   if (!fs.existsSync(p)) throw new Error(`no run state at ${p}`);
   const state = JSON.parse(fs.readFileSync(p, "utf8"));
-  validateState(state);
+  assertValidState(state);
   return state;
 }
 
 export function writeState(dir, state) {
-  validateState(state);
+  assertValidState(state);
   fs.mkdirSync(dir, { recursive: true });
   const p = statePath(dir);
   const tmp = `${p}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;

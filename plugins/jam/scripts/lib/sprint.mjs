@@ -32,6 +32,17 @@ export function verifySprint({ runDir: dir, sprintId, cwd, now }) {
   return recordEvidence({ runDir: dir, gateId: sprintGateId(sprintId), sprintId, command: verifyCmd, cwd, now });
 }
 
+export function bindCodexSession({ runDir: dir, sprintId, sessionId, transcriptPath, now }) {
+  const state = readState(dir);
+  const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
+  if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
+  sprint.codexSessions = sprint.codexSessions ?? [];
+  sprint.codexSessions.push({ sessionId, transcriptPath: transcriptPath ?? null, at: nowIso(now) });
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "codex-bound", sprintId, sessionId });
+  return state;
+}
+
 export function finishSprint({ runDir: dir, sprintId, now }) {
   const state = readState(dir);
   const gate = state.gates[sprintGateId(sprintId)];
