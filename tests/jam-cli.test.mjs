@@ -120,7 +120,7 @@ test("steer records a durable directive shown in status", () => {
 test("cancel clears the active run so status reports none", () => {
   const root = tmpProject();
   jam(root, ["start", "x", "--run-id", "r1"]);
-  const r = jam(root, ["cancel"]);
+  const r = jam(root, ["cancel", "--confirm", "r1"]);
   assert.equal(r.status, 0);
   const s = jam(root, ["status"]);
   assert.notEqual(s.status, 0);

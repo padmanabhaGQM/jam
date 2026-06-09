@@ -20,6 +20,7 @@ import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession } from "./lib/sprint.mjs";
 import { auditRun } from "./lib/audit.mjs";
+import { proposeAction, ratifyAction } from "./lib/action.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -92,6 +93,9 @@ function cmdStatus(cwd) {
       lines.push(`  promotion ${p.id}: ${p.reason} (by ${p.discoveredBy})`);
     }
   }
+  for (const a of state.actions ?? []) {
+    lines.push(`  action ${a.id}: ${a.type ?? "?"} [${a.irreversible ? "HARD-BLOCK" : "ok"}] ${a.status}${a.reasons?.length ? " — " + a.reasons.join("; ") : ""}`);
+  }
   process.stdout.write(lines.join("\n") + "\n");
 }
 
@@ -160,8 +164,31 @@ function cmdSteer(cwd, positional) {
   process.stdout.write(`recorded steering directive ${d.id}\n`);
 }
 
-function cmdCancel(cwd) {
+function cmdProposeAction(cwd, positional, flags) {
+  const id = positional[0];
+  if (!id || !flags.type) return fail("usage: jam propose-action <id> --type <t> [--target <x>] [--command <c>]");
   const { dir } = requireActiveRun(cwd);
+  try {
+    const { irreversible, reasons } = proposeAction({ runDir: dir, id, type: flags.type, target: flags.target, command: flags.command });
+    if (irreversible) process.stdout.write(`action ${id}: HARD-BLOCKED (irreversible): ${reasons.join("; ")}\n  ratify with: jam ratify ${id} --confirm ${id}  (or: jam ratify ${id} --deny)\n`);
+    else process.stdout.write(`action ${id}: reversible (ok to proceed)\n`);
+  } catch (e) { return fail(e.message); }
+}
+
+function cmdRatify(cwd, positional, flags) {
+  const id = positional[0];
+  if (!id) return fail("usage: jam ratify <id> --confirm <id> | --deny");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    if ("deny" in flags) { ratifyAction({ runDir: dir, id, deny: true }); process.stdout.write(`action ${id}: denied\n`); }
+    else if (flags.confirm) { ratifyAction({ runDir: dir, id, confirm: flags.confirm }); process.stdout.write(`action ${id}: ratified\n`); }
+    else return fail("usage: jam ratify <id> --confirm <id> | --deny");
+  } catch (e) { return fail(e.message); }
+}
+
+function cmdCancel(cwd, positional, flags) {
+  const { runId, dir } = requireActiveRun(cwd);
+  if (flags.confirm !== runId) return fail(`cancel is irreversible — re-run with --confirm ${runId}`);
   cancelRun({ projectRoot: cwd, runDir: dir });
   process.stdout.write("jam run cancelled\n");
 }
@@ -346,7 +373,11 @@ async function main() {
     case "steer":
       return cmdSteer(cwd, positional);
     case "cancel":
-      return cmdCancel(cwd);
+      return cmdCancel(cwd, positional, flags);
+    case "propose-action":
+      return cmdProposeAction(cwd, positional, flags);
+    case "ratify":
+      return cmdRatify(cwd, positional, flags);
     case "diagnose":
       return cmdDiagnose(cwd, positional, flags);
     case "verify":
