@@ -5,6 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { readActiveRunId, runDir as runDirOf } from "../plugins/jam/scripts/lib/paths.mjs";
+import { readState, writeState } from "../plugins/jam/scripts/lib/state.mjs";
+import { appendLedger } from "../plugins/jam/scripts/lib/ledger.mjs";
 
 const CLI = fileURLToPath(new URL("../plugins/jam/scripts/jam.mjs", import.meta.url));
 const FAKE = fileURLToPath(new URL("./fixtures/fake-codex.mjs", import.meta.url));
@@ -42,4 +45,26 @@ test("jam audit reports PASS on an honestly-driven run", () => {
   const r = jam(root, ["audit"]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /audit: PASS/);
+});
+
+test("advance to FINISH succeeds on an honest run", () => {
+  const root = tmp();
+  driveToDoneSprint(root);
+  assert.equal(jam(root, ["advance"]).status, 0);            // IMPLEMENT → FINISH
+  assert.match(jam(root, ["status"]).stdout, /phase FINISH/);
+});
+
+test("advance to FINISH is blocked when the ledger is forged (a sprint-done with no codex-bound)", () => {
+  const root = tmp();
+  driveToDoneSprint(root);
+  const dir = runDirOf(root, readActiveRunId(root));
+  // Forge a second 'done' sprint: state carries a (bogus) binding so validateState
+  // accepts the write, but the ledger has NO codex-bound for it → the audit must catch it.
+  const s = readState(dir);
+  s.plan.sprints.push({ id: "ghost", title: "g", status: "done", codexSessions: [{ sessionId: "x", transcriptPath: "/nope.jsonl", at: "t" }] });
+  writeState(dir, s);
+  appendLedger(dir, { at: "t", type: "sprint-done", sprintId: "ghost" });
+  const r = jam(root, ["advance"]);
+  assert.notEqual(r.status, 0);
+  assert.match((r.stderr || "") + (r.stdout || ""), /audit failed/);
 });

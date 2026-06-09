@@ -2,6 +2,7 @@ import { readState, writeState, addGate } from "./state.mjs";
 import { evaluateGate } from "./gate.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { allSprintsDone } from "./sprint.mjs";
+import { auditRun } from "./audit.mjs";
 
 export const repairPhaseOrder = ["DIAGNOSE", "VERIFY", "PLAN", "IMPLEMENT", "FINISH"];
 
@@ -27,6 +28,10 @@ export function advancePhase(state) {
 export function advanceRun({ runDir: dir, now }) {
   const state = readState(dir);
   const from = state.phase;
+  if (state.phase === "IMPLEMENT") {
+    const audit = auditRun({ runDir: dir });
+    if (!audit.ok) throw new Error(`cannot advance to FINISH: audit failed: ${audit.failures.join("; ")}`);
+  }
   advancePhase(state);
   writeState(dir, state);
   appendLedger(dir, { at: now ?? new Date().toISOString(), type: "phase-advanced", from, to: state.phase });
