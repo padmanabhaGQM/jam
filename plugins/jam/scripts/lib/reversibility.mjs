@@ -30,6 +30,8 @@ const DESTRUCTIVE_PATTERNS = [
   /\baws\s+\S+\s+rm\b/,
   /\bdd\b.*\bof=/,
   /\bshred\b/,
+  /\bmv\b.*\s\/dev\/null\b/,
+  /\bunlink\s+\S/,
   /\bfind\b.*-delete\b/,
   /\bmkfs\b/,
 ];

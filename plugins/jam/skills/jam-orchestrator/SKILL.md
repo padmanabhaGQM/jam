@@ -28,7 +28,9 @@ jam ratify <id> --deny             # refuse
 ```
 `/jam:approve` cannot open it. `jam cancel` (itself irreversible) requires `--confirm <runId>`. The FINISH audit refuses to pass while any irreversible action is still undecided.
 
-**Honest boundary:** this governs *declared* actions plus jam's own destructive ops — it does NOT yet intercept Codex's raw in-turn sandbox shell (the deferred **G0.5** slice). Until then, the orchestrator must declare consequential actions via `propose-action` rather than letting Codex run them unannounced.
+**Declare by specific type, not by raw command.** The fail-safe guarantee lives in the *type* allowlist (an unrecognized type requires ratification). The command screen on `--type run` is a best-effort backstop and is deliberately incomplete — shell is open-ended. So declare a destructive operation with its real type (`jam propose-action drop-users --type db-drop`, `--type delete-path`, …), NOT as a generic `--type run "<cmd>"` that hopes the regex catches it. Reserve `--type run` for genuinely safe commands (tests, builds, linters).
+
+**Honest boundary:** this governs *declared* actions plus jam's own destructive ops — it does NOT yet intercept Codex's raw in-turn sandbox shell (the deferred **G0.5** slice). Until then, the orchestrator must declare consequential actions via `propose-action` rather than letting Codex run them unannounced. Likewise, a raw `--type run` command is only pattern-screened, not fully classified — full raw-shell coverage is the G0.5 layer.
 
 ---
 

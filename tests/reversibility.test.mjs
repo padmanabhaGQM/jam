@@ -41,3 +41,7 @@ test("broadened destructive command patterns are flagged", () => {
     assert.equal(classifyAction({ type: "run", command: cmd }).irreversible, true, cmd);
   }
 });
+test("data-destroying mv/unlink commands are flagged", () => {
+  assert.equal(classifyAction({ type: "run", command: "mv prod.db /dev/null" }).irreversible, true);
+  assert.equal(classifyAction({ type: "run", command: "unlink important.sock" }).irreversible, true);
+});
