@@ -19,6 +19,7 @@ import { setGoal } from "./lib/goal.mjs";
 import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession } from "./lib/sprint.mjs";
+import { auditRun } from "./lib/audit.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -299,6 +300,13 @@ function cmdPlan(cwd, positional, flags) {
   process.stdout.write(`plan recorded: ${state.plan.sprints.length} sprint(s); verify: ${state.plan.verifyCmd}\n`);
 }
 
+function cmdAudit(cwd) {
+  const { dir } = requireActiveRun(cwd);
+  const { ok, failures } = auditRun({ runDir: dir });
+  if (ok) { process.stdout.write("audit: PASS\n"); return; }
+  return fail("audit: FAIL\n" + failures.map((f) => "  - " + f).join("\n"));
+}
+
 async function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const cwd = process.cwd();
@@ -337,6 +345,8 @@ async function main() {
       return cmdPlan(cwd, positional, flags);
     case "sprint":
       return cmdSprint(cwd, positional, flags);
+    case "audit":
+      return cmdAudit(cwd);
     default:
       return fail(`unknown subcommand: ${sub ?? "(none)"}`);
   }
