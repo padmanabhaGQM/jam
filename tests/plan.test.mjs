@@ -39,6 +39,7 @@ test("recordPlan records a valid plan and flips PLAN gate to 'planned'", () => {
   assert.equal(s.plan.verifyCmd, "bash verify.sh");
   assert.equal(s.plan.sprints[0].id, "fix-1");
   assert.equal(s.plan.sprints[0].status, "pending");
+  assert.equal(s.plan.sprints[0].provenance, "planned");
   assert.ok(fs.existsSync(path.join(dir, "plan.json")));
   assert.equal(readLedger(dir).at(-1).type, "plan-recorded");
 });

@@ -38,6 +38,12 @@ test("promoteSprint refuses off-IMPLEMENT, missing fields, and duplicate ids", (
   assert.throws(() => promoteSprint({ runDir: dir, id: "y", title: "t", reason: "r" }), /not IMPLEMENT/);
 });
 
+test("promoteSprint refuses when no plan has been recorded", () => {
+  const dir = createRun({ projectRoot: tmp(), runId: "r1", mode: "repair", now: "t" });
+  const s = readState(dir); s.phase = "IMPLEMENT"; s.plan = null; writeState(dir, s);
+  assert.throws(() => promoteSprint({ runDir: dir, id: "x", title: "t", reason: "r" }), /no plan/);
+});
+
 test("validateState rejects invalid provenance and malformed promotions; accepts valid/absent", () => {
   const dir = runAtImplement();
   const s = readState(dir);

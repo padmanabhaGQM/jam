@@ -45,6 +45,7 @@ export function promoteSprint({ runDir: dir, id, title, acceptanceCriteria, disc
   if (state.phase !== "IMPLEMENT") throw new Error(`cannot promote a sprint: phase is ${state.phase}, not IMPLEMENT`);
   if (!id || !title) throw new Error("promote-sprint requires id and title");
   if (!reason) throw new Error("promote-sprint requires a reason");
+  if (!state.plan) throw new Error("cannot promote a sprint: no plan has been recorded");
   const sprints = state.plan?.sprints ?? [];
   if (sprints.some((s) => s.id === id)) throw new Error(`sprint ${id} already exists`);
   const at = now ?? new Date().toISOString();
