@@ -56,8 +56,22 @@ export function validateState(state) {
         }
       }
     }
+    if ("provenance" in sp && !["planned", "promoted"].includes(sp.provenance)) {
+      errors.push(`sprint ${sp.id}: provenance must be "planned" or "promoted"`);
+    }
     if (sp.status === "done" && !(sp.codexSessions ?? []).length) {
       errors.push(`sprint ${sp.id}: status is done but has no bound Codex session`);
+    }
+  }
+  if ("promotions" in state) {
+    if (!Array.isArray(state.promotions)) {
+      errors.push("promotions must be an array");
+    } else {
+      for (const p of state.promotions) {
+        if (!p || typeof p.id !== "string" || typeof p.reason !== "string") {
+          errors.push("each promotion needs a string id and reason");
+        }
+      }
     }
   }
   return errors;

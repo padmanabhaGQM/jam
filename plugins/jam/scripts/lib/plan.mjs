@@ -32,10 +32,27 @@ export function recordPlan({ runDir: dir, plan, now }) {
   fs.writeFileSync(path.join(dir, "plan.json"), JSON.stringify(plan, null, 2));
   state.plan = {
     verifyCmd: plan.verifyCmd,
-    sprints: plan.sprints.map((s) => ({ id: s.id, title: s.title, acceptanceCriteria: s.acceptanceCriteria ?? "", status: "pending" }))
+    sprints: plan.sprints.map((s) => ({ id: s.id, title: s.title, acceptanceCriteria: s.acceptanceCriteria ?? "", status: "pending", provenance: "planned" }))
   };
   g.status = "planned";
   writeState(dir, state);
   appendLedger(dir, { at: now ?? new Date().toISOString(), type: "plan-recorded", sprints: plan.sprints.length });
+  return state;
+}
+
+export function promoteSprint({ runDir: dir, id, title, acceptanceCriteria, discoveredBy, reason, now }) {
+  const state = readState(dir);
+  if (state.phase !== "IMPLEMENT") throw new Error(`cannot promote a sprint: phase is ${state.phase}, not IMPLEMENT`);
+  if (!id || !title) throw new Error("promote-sprint requires id and title");
+  if (!reason) throw new Error("promote-sprint requires a reason");
+  const sprints = state.plan?.sprints ?? [];
+  if (sprints.some((s) => s.id === id)) throw new Error(`sprint ${id} already exists`);
+  const at = now ?? new Date().toISOString();
+  sprints.push({ id, title, acceptanceCriteria: acceptanceCriteria ?? "", status: "pending", provenance: "promoted" });
+  state.plan.sprints = sprints;
+  state.promotions = state.promotions ?? [];
+  state.promotions.push({ id, discoveredBy: discoveredBy ?? "orchestrator", reason, decidedBy: "orchestrator", at });
+  writeState(dir, state);
+  appendLedger(dir, { at, type: "sprint-promoted", id, reason });
   return state;
 }
