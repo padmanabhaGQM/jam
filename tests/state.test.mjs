@@ -39,13 +39,13 @@ test("createInitialState seeds ALIGN human gate", () => {
 test("validateState rejects bad mode/status", () => {
   const s = createInitialState({ runId: "r1", now: "t" });
   s.gates.ALIGN.mode = "bogus";
-  assert.throws(() => validateState(s), /invalid mode/);
+  assert.ok(validateState(s).some((e) => /invalid mode/.test(e)));
 });
 
 test("validateState rejects bad status", () => {
   const s = createInitialState({ runId: "r1", now: "t" });
   s.gates.ALIGN.status = "bogus";
-  assert.throws(() => validateState(s), /invalid status/);
+  assert.ok(validateState(s).some((e) => /invalid status/.test(e)));
 });
 
 test("writeState/readState round-trips atomically", () => {

@@ -32,15 +32,18 @@ export function createInitialState({ runId, topic, now, mode }) {
 }
 
 export function validateState(state) {
-  if (!state || typeof state !== "object") throw new Error("state must be an object");
-  for (const k of ["runId", "phase", "gates", "dial", "createdAt"]) {
-    if (!(k in state)) throw new Error(`state missing required field: ${k}`);
-  }
-  for (const [id, g] of Object.entries(state.gates)) {
-    if (!VALID_MODES.includes(g.mode)) throw new Error(`gate ${id}: invalid mode ${g.mode}`);
-    if (!VALID_STATUSES.includes(g.status)) throw new Error(`gate ${id}: invalid status ${g.status}`);
-  }
   const errors = [];
+  if (!state || typeof state !== "object") {
+    errors.push("state must be an object");
+    return errors;
+  }
+  for (const k of ["runId", "phase", "gates", "dial", "createdAt"]) {
+    if (!(k in state)) errors.push(`state missing required field: ${k}`);
+  }
+  for (const [id, g] of Object.entries(state.gates ?? {})) {
+    if (!VALID_MODES.includes(g.mode)) errors.push(`gate ${id}: invalid mode ${g.mode}`);
+    if (!VALID_STATUSES.includes(g.status)) errors.push(`gate ${id}: invalid status ${g.status}`);
+  }
   for (const sp of state.plan?.sprints ?? []) {
     if ("codexSessions" in sp) {
       if (!Array.isArray(sp.codexSessions)) {
