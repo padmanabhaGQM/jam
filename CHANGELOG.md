@@ -5,6 +5,13 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.12.0 — Greenfield mode + GROUND phase (ganjam G1)
+- New **greenfield** mode (`jam start --mode greenfield`) alongside repair mode; `lib/mode.mjs` owns both phase orders.
+- The **GROUND** phase turns a raw intent into an evidence-backed grounded-intent via two adversarial groundings and a claim-ledger.
+- Two mechanism-bound human gates: `GROUND-scope` (sharpened intent, before research) and `GROUND` (converged grounding). A feasibility claim is only `evidenced` with a real Codex probe transcript.
+- `CONVERGE/SPECIFY/BUILD` are defined as stub phases that refuse to advance (ship in G2–G4).
+- `jam ground sharpen|claim|refute|converge`; `jam status` shows mode + grounding.
+
 ## 0.11.0 — Hard-block / reversibility tier (first greenfield brick)
 - Every consequential action is classified by reversibility (`jam propose-action <id> --type <t>`). The classifier is **fail-safe**: an unrecognized type requires ratification rather than silently passing.
 - Irreversible actions (`delete`, force-push, `DROP`, infra-destroy, deploy, restart-rearchitect, …) are **hard-blocked** behind a human ratification gate that opens only via `jam ratify <id> --confirm <id>` (typed confirm must equal the id) or `--deny`. `/jam:approve` cannot open it.

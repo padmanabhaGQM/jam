@@ -16,6 +16,7 @@ import { readState } from "./lib/state.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
 import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
+import { sharpenIntent, addClaim, refuteClaim, convergeGrounding } from "./lib/grounding.mjs";
 import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession } from "./lib/sprint.mjs";
@@ -59,16 +60,29 @@ function genRunId() {
 
 function cmdStart(cwd, positional, flags) {
   const topic = positional.join(" ").trim();
-  if (!topic) fail("usage: jam start <topic>");
+  if (!topic) fail("usage: jam start <topic> [--mode greenfield]");
   const runId = flags["run-id"] || genRunId();
-  createRun({ projectRoot: cwd, runId, topic });
-  process.stdout.write(`started jam run ${runId} (phase ALIGN, gate ALIGN: pending)\n`);
+  const mode = flags.mode === "greenfield" ? "greenfield" : undefined;
+  createRun({ projectRoot: cwd, runId, topic, mode });
+  if (mode === "greenfield") {
+    const { dir } = requireActiveRun(cwd);
+    setGoal({ runDir: dir, text: topic, source: "human" });
+    process.stdout.write(`started jam run ${runId} (mode greenfield, phase GROUND, gate GROUND-scope: pending)\n`);
+  } else {
+    process.stdout.write(`started jam run ${runId} (phase ALIGN, gate ALIGN: pending)\n`);
+  }
 }
 
 function cmdStatus(cwd) {
   const { runId, dir } = requireActiveRun(cwd);
   const state = readState(dir);
   const lines = [`run ${runId} — phase ${state.phase}`];
+  if (state.mode === "greenfield") {
+    const g = state.grounding ?? {};
+    const byStatus = (g.claims ?? []).reduce((m, c) => ((m[c.status] = (m[c.status] ?? 0) + 1), m), {});
+    lines.push(`mode greenfield · phase ${state.phase}`);
+    lines.push(`  grounding: problem ${g.problem ? "set" : "unset"} · dimensions ${(g.dimensions ?? []).length} · claims: ${(g.claims ?? []).length}${Object.keys(byStatus).length ? " (" + Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(", ") + ")" : ""} · converged ${g.converged ? "yes" : "no"}`);
+  }
   for (const [id, g] of Object.entries(state.gates)) {
     lines.push(`  gate ${id}: ${g.mode}/${g.status}`);
   }
@@ -183,6 +197,41 @@ function cmdRatify(cwd, positional, flags) {
     if ("deny" in flags) { ratifyAction({ runDir: dir, id, deny: true }); process.stdout.write(`action ${id}: denied\n`); }
     else if (flags.confirm) { ratifyAction({ runDir: dir, id, confirm: flags.confirm }); process.stdout.write(`action ${id}: ratified\n`); }
     else return fail("usage: jam ratify <id> --confirm <id> | --deny");
+  } catch (e) { return fail(e.message); }
+}
+
+function cmdGround(cwd, positional, flags) {
+  const sub = positional[0];
+  const { dir } = requireActiveRun(cwd);
+  const readFile = () => {
+    if (!flags.file) return fail("usage: jam ground <sharpen|claim|converge> --file <json>  (refute uses --id)");
+    return JSON.parse(fs.readFileSync(flags.file, "utf8"));
+  };
+  try {
+    switch (sub) {
+      case "sharpen": {
+        const o = readFile();
+        sharpenIntent({ runDir: dir, problem: o.problem, dimensions: o.dimensions });
+        return process.stdout.write(`intent sharpened; GROUND-scope is now scoped — approve with: jam approve GROUND-scope\n`);
+      }
+      case "claim": {
+        const o = readFile();
+        addClaim({ runDir: dir, id: o.id, text: o.text, kind: o.kind, status: o.status, source: o.source, evidenceRef: o.evidenceRef });
+        return process.stdout.write(`claim ${o.id} recorded (${o.kind}/${o.status})\n`);
+      }
+      case "refute": {
+        if (!flags.id) return fail("usage: jam ground refute --id <claimId>");
+        refuteClaim({ runDir: dir, id: flags.id });
+        return process.stdout.write(`claim ${flags.id} refuted (dropped)\n`);
+      }
+      case "converge": {
+        const o = flags.file ? readFile() : {};
+        convergeGrounding({ runDir: dir, options: o.options, openUnknowns: o.openUnknowns });
+        return process.stdout.write(`grounding converged; GROUND is now grounded — ratify with: jam approve GROUND\n`);
+      }
+      default:
+        return fail("usage: jam ground <sharpen|claim|refute|converge>");
+    }
   } catch (e) { return fail(e.message); }
 }
 
@@ -360,6 +409,8 @@ async function main() {
   switch (sub) {
     case "start":
       return cmdStart(cwd, positional, flags);
+    case "ground":
+      return cmdGround(cwd, positional, flags);
     case "status":
       return cmdStatus(cwd);
     case "render-digest":
