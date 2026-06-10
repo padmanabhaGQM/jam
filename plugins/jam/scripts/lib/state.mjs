@@ -104,6 +104,15 @@ export function validateState(state) {
       }
     }
   }
+  if (state.grounding && Array.isArray(state.grounding.claims)) {
+    for (const c of state.grounding.claims) {
+      const ok = c && typeof c.id === "string" && typeof c.text === "string" && c.text.length > 0
+        && ["feasibility", "framing", "option"].includes(c.kind)
+        && ["evidenced", "open-unknown"].includes(c.status)
+        && ["claude", "codex", "both"].includes(c.source);
+      if (!ok) errors.push(`grounding claim invalid: ${c && c.id ? c.id : "(unnamed)"}`);
+    }
+  }
   return errors;
 }
 

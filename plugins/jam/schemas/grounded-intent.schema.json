@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "grounded-intent",
+  "type": "object",
+  "required": ["problem", "dimensions", "claims"],
+  "properties": {
+    "problem": { "type": "string", "minLength": 1 },
+    "dimensions": { "type": "array", "items": { "type": "string" } },
+    "options": { "type": "array", "items": {
+      "type": "object",
+      "required": ["name"],
+      "properties": { "name": { "type": "string" }, "priorArt": { "type": "string" }, "tradeoffs": { "type": "string" } }
+    } },
+    "claims": { "type": "array", "items": {
+      "type": "object",
+      "required": ["id", "text", "kind", "status", "source"],
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["feasibility", "framing", "option"] },
+        "status": { "enum": ["evidenced", "open-unknown"] },
+        "source": { "enum": ["claude", "codex", "both"] },
+        "evidenceRef": { "type": "string" }
+      }
+    } },
+    "openUnknowns": { "type": "array", "items": { "type": "string" } },
+    "converged": { "type": "boolean" }
+  }
+}
