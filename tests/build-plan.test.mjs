@@ -16,7 +16,7 @@ test("recordBuildPlan sets sprints, keeps verifyCmd = the locked SSOT, opens BUI
   assert.equal(s.plan.sprints.length, 2);
   assert.equal(s.plan.sprints[0].provenance, "planned");
   assert.equal(s.gates["BUILD-plan"].status, "planned");
-  assert.ok(readLedger(dir).some((e) => e.type === "plan-recorded"));
+  assert.ok(readLedger(dir).some((e) => e.type === "plan-recorded" && e.sprints === 2 && e.sprintIds?.join(",") === "b1,b2"));
   recordApproval({ runDir: dir, gateId: "BUILD-plan", who: "u", now: "t22" });
   assert.equal(readState(dir).gates["BUILD-plan"].status, "approved");
 });

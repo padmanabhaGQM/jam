@@ -49,14 +49,13 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
   });
 
   if (greenfield) {
-    for (const e of ledger) {
-      if (e.type !== "phase-advanced") continue;
+    ledger.forEach((e, i) => {
+      if (e.type !== "phase-advanced") return;
       for (const gid of (REQUIRED_GREENFIELD_GATES[e.from] ?? [])) {
-        if (!ledger.some((x) => x.type === "approval" && x.gateId === gid)) {
-          failures.push(`ordering: greenfield phase ${e.from} advanced without an approval for required gate ${gid}`);
-        }
+        const idx = ledger.findIndex((x, xi) => xi < i && x.type === "approval" && x.gateId === gid);
+        if (idx === -1) failures.push(`ordering: greenfield phase ${e.from} advanced without a preceding approval for required gate ${gid}`);
       }
-    }
+    });
   }
 
   // BUILD's producer/approval is MANDATORY for any greenfield run at or past BUILD — keyed on PHASE, not on
@@ -87,6 +86,15 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     if ((finishIdx !== -1 || state.phase === "FINISH") && !allSprintsDone(state)) {
       failures.push("ordering: greenfield BUILD->FINISH requires all build sprints done");
     }
+    const buildApprIdx = ledger.findIndex((x) => x.type === "approval" && x.gateId === "BUILD-plan");
+    let approvedPlan = null;
+    ledger.forEach((x, xi) => { if (x.type === "plan-recorded" && (buildApprIdx === -1 || xi <= buildApprIdx)) approvedPlan = x; });
+    if (approvedPlan && Array.isArray(approvedPlan.sprintIds)) {
+      const have = new Set((state.plan?.sprints ?? []).map((s) => s.id));
+      for (const id of approvedPlan.sprintIds) {
+        if (!have.has(id)) failures.push(`consistency: approved build sprint ${id} is missing from state.plan`);
+      }
+    }
   }
 
   if (greenfield && typeof state.phase === "string" && ORDER.includes(state.phase) && expectedFrom !== state.phase) {
@@ -99,6 +107,8 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     const S = e.sprintId;
     const boundIdx = ledger.findIndex((x, xi) => xi < d && x.type === "codex-bound" && x.sprintId === S);
     if (boundIdx === -1) failures.push(`authorship: sprint-done ${S} has no preceding codex-bound`);
+    const startedIdx = ledger.findIndex((x, xi) => xi < d && x.type === "sprint-started" && x.sprintId === S);
+    if (startedIdx === -1) failures.push(`ordering: sprint-done ${S} has no preceding sprint-started`);
     const sprint = sprints.find((s) => s.id === S);
     const transcriptOk = (sprint?.codexSessions ?? []).some((s) => transcriptExists(s.transcriptPath));
     if (!transcriptOk) failures.push(`authorship: sprint ${S} has no bound session with an existing transcript`);

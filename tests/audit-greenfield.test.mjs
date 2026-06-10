@@ -14,7 +14,8 @@ function gfLedger() {
     { type: "grounding-converged" }, { type: "approval", gateId: "GROUND-scope" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
     { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
     { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
-    { type: "plan-recorded" }, { type: "approval", gateId: "BUILD-plan" },
+    { type: "plan-recorded", sprints: 1, sprintIds: ["b1"] }, { type: "approval", gateId: "BUILD-plan" },
+    { type: "sprint-started", sprintId: "b1" },
     { type: "codex-bound", sprintId: "b1" },
     { type: "evidence", sprintId: "b1", gateId: "sprint-b1", exitCode: 0 },
     { type: "sprint-done", sprintId: "b1" },
@@ -116,6 +117,26 @@ test("KEY RED-TEAM: a greenfield phase advanced without a required sub-gate appr
   const led = gfLedger().filter((e) => !(e.type === "approval" && e.gateId === "SPECIFY-coverage"));
   const r = evaluateAudit({ ledger: led, state: gfState(), transcriptExists: yes });
   assert.ok(r.failures.some((f) => /required gate SPECIFY-coverage/.test(f)));
+});
+
+test("KEY RED-TEAM: a required sub-gate approval after the phase advance does not satisfy the audit", () => {
+  const led = gfLedger().filter((e) => !(e.type === "approval" && e.gateId === "SPECIFY-coverage"));
+  const specifyAdvance = led.findIndex((e) => e.type === "phase-advanced" && e.from === "SPECIFY" && e.to === "BUILD");
+  led.splice(specifyAdvance + 1, 0, { type: "approval", gateId: "SPECIFY-coverage" });
+  const r = evaluateAudit({ ledger: led, state: gfState(), transcriptExists: yes });
+  assert.ok(r.failures.some((f) => /without a preceding approval for required gate SPECIFY-coverage/.test(f)));
+});
+
+test("KEY RED-TEAM: sprint-done with no preceding sprint-started fails the audit", () => {
+  const led = gfLedger().filter((e) => e.type !== "sprint-started");
+  const r = evaluateAudit({ ledger: led, state: gfState(), transcriptExists: yes });
+  assert.ok(r.failures.some((f) => /no preceding sprint-started/.test(f)));
+});
+
+test("KEY RED-TEAM: an approved build plan with a missing state sprint fails the audit", () => {
+  const led = gfLedger().map((e) => e.type === "plan-recorded" ? { ...e, sprintIds: ["b1", "b2"] } : e);
+  const r = evaluateAudit({ ledger: led, state: gfState(), transcriptExists: yes });
+  assert.ok(r.failures.some((f) => /approved build sprint b2 is missing/.test(f)));
 });
 
 test("KEY RED-TEAM: a greenfield BUILD state with no certified spec.verifyCmd fails validation", () => {

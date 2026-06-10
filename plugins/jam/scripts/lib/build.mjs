@@ -26,6 +26,6 @@ export function recordBuildPlan({ runDir: dir, sprints, verifyCmd, now }) {
   state.plan.sprints = mapped;
   state.gates["BUILD-plan"].status = "planned";
   writeState(dir, state);
-  appendLedger(dir, { at: nowIso(now), type: "plan-recorded", sprints: mapped.length });
+  appendLedger(dir, { at: nowIso(now), type: "plan-recorded", sprints: mapped.length, sprintIds: mapped.map((s) => s.id) });
   return state;
 }
