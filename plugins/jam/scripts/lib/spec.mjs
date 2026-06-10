@@ -80,3 +80,35 @@ export function recordGameability({ runDir: dir, reviewer, author, survivingFind
   if (reopened) appendLedger(dir, { at: nowIso(now), type: "spec-reopened", reason: "gameability re-recorded after certification" });
   return state;
 }
+
+export function certifyVerifyCmd({ runDir: dir, cwd, now }) {
+  const state = readState(dir);
+  requireSpecify(state);
+  const sp = state.spec;
+  if (state.gates["SPECIFY-coverage"].status !== "approved") throw new Error("certifyVerifyCmd: the SPECIFY-coverage gate must be approved first");
+  if (!sp.verifyCmd || !sp.verifyCmd.trim()) throw new Error("certifyVerifyCmd: no verifyCmd set");
+  if (!Array.isArray(sp.checks) || sp.checks.length === 0) throw new Error("certifyVerifyCmd: no checks set");
+  // (c) coverage: there must be >=1 G2 acceptance dimension, and every one has a check
+  const dims = (state.convergence && Array.isArray(state.convergence.ledger)) ? state.convergence.ledger.map((r) => r.dimension) : [];
+  if (dims.length === 0) throw new Error("certifyVerifyCmd: no acceptance dimensions from the converged decision — nothing to certify against");
+  if (dims.some((d) => !d || !d.trim())) throw new Error("certifyVerifyCmd: an acceptance dimension is blank");
+  const covered = new Set(sp.checks.map((c) => c.dimension));
+  for (const d of dims) {
+    if (!covered.has(d)) throw new Error(`certifyVerifyCmd: acceptance dimension "${d}" has no check`);
+  }
+  // (d) red-first: require it was recorded (process), then RE-RUN live so a stale proof / edited suite can't pass
+  if (!sp.redProof) throw new Error("certifyVerifyCmd: no red-first proof — run jam specify redproof");
+  const live = runVerification(sp.verifyCmd, cwd ?? dir);
+  if (live.exitCode === 0) throw new Error("certifyVerifyCmd: verifyCmd passes right now (exit 0) — it must be RED on the un-built project");
+  // (e) gameability
+  if (!sp.gameability) throw new Error("certifyVerifyCmd: no gameability verdict — run the Codex gameability audit");
+  if (sp.gameability.reviewer !== "codex") throw new Error("certifyVerifyCmd: the gameability verdict must be Codex-authored");
+  if (sp.gameability.reviewer === sp.gameability.author) throw new Error("certifyVerifyCmd: the gameability reviewer must differ from the author");
+  if (sp.gameability.survivingFindings !== 0) throw new Error(`certifyVerifyCmd: ${sp.gameability.survivingFindings} surviving gameability finding(s) — fix the suite and re-audit`);
+  sp.certified = true;
+  sp.redProof = { exitCode: live.exitCode, at: nowIso(now) };   // refresh with the authoritative live re-run
+  state.gates["SPECIFY"].status = "specified";
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "spec-certified", verifyCmd: sp.verifyCmd });
+  return state;
+}

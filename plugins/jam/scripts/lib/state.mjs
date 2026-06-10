@@ -132,6 +132,17 @@ export function validateState(state) {
       ["decided", "approved"].includes(state.gates["CONVERGE"].status) && state.convergence.decided !== true) {
     errors.push("CONVERGE gate is decided/approved but convergence.decided is not true");
   }
+  if (state.spec && Array.isArray(state.spec.checks)) {
+    for (const c of state.spec.checks) {
+      if (!c || typeof c.id !== "string" || typeof c.dimension !== "string" || typeof c.ref !== "string") {
+        errors.push(`spec check invalid: ${c && c.id ? c.id : "(unnamed)"}`);
+      }
+    }
+  }
+  if (state.spec && state.gates && state.gates["SPECIFY"] &&
+      ["specified", "approved"].includes(state.gates["SPECIFY"].status) && state.spec.certified !== true) {
+    errors.push("SPECIFY gate is specified/approved but spec.certified is not true");
+  }
   return errors;
 }
 
