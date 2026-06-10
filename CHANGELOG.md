@@ -5,6 +5,14 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.15.0 — BUILD phase (ganjam G4) — greenfield loop complete
+- Greenfield's final phase: wire the certified verifyCmd SSOT into a locked build plan and run the existing gated sprint loop to FINISH.
+- `state.plan.verifyCmd` is LOCKED to the certified SSOT (`recordBuildPlan` rejects any other) — you build to exactly the bar you certified.
+- BUILD reuses repair's IMPLEMENT machinery (sprint --start/--verify/--done, role-binding, DAG, promotion); advance BUILD→FINISH requires the BUILD-plan gate approved + all sprints done + a passing run-honesty audit.
+- The run-honesty audit is now **mode-aware** (validates the greenfield phase order GROUND→CONVERGE→SPECIFY→BUILD and each phase's producing artifact).
+- Hardening: `advancePhase` now requires EVERY gate of a greenfield phase (main + sub-gates) approved before advancing.
+- `jam build plan`. The full `intent → GROUND → CONVERGE → SPECIFY → BUILD → FINISH` loop is complete.
+
 ## 0.14.0 — SPECIFY phase (ganjam G3)
 - Greenfield's third phase: author the project's GLOBAL `verifyCmd` as a human-ratified SSOT.
 - Un-gameable triad before ratification: RED-FIRST (verifyCmd must exit non-zero on the un-built project), COVERAGE (every G2 acceptance dimension bound to ≥1 check), and a Codex GAMEABILITY audit (zero surviving "hollow check" findings).

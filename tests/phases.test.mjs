@@ -55,6 +55,7 @@ test("IMPLEMENT advances to FINISH only when all sprints are done", () => {
   s2.plan.sprints[0].provenance = "planned";
   s2.plan.sprints[0].codexSessions = [{ sessionId: "s", transcriptPath: tp, at: "t" }];
   writeState(dir, s2);
+  appendLedger(dir, { at: "t", type: "sprint-started", sprintId: "a" });
   appendLedger(dir, { at: "t", type: "codex-bound", sprintId: "a", sessionId: "s" });
   appendLedger(dir, { at: "t", type: "evidence", gateId: "sprint-a", sprintId: "a", exitCode: 0 });
   appendLedger(dir, { at: "t", type: "sprint-done", sprintId: "a" });

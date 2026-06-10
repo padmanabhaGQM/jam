@@ -29,6 +29,7 @@ test("advancing CONVERGE -> SPECIFY now succeeds (SPECIFY is no longer a stub)",
   const dir = atConverge();
   const s = readState(dir);
   s.gates["CONVERGE"].status = "approved";
+  s.gates["CONVERGE-shortlist"].status = "approved";
   s.convergence.decided = true;
   fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify(s, null, 2));
   advanceRun({ runDir: dir, now: "t7" });

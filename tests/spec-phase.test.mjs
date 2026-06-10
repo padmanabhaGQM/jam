@@ -16,13 +16,16 @@ test("advancing CONVERGE -> SPECIFY now succeeds, creates the SPECIFY gates and 
   assert.deepEqual(s.spec, { verifyCmd: null, checks: [], redProof: null, gameability: null, certified: false });
 });
 
-test("BUILD is still a stub: advancing from SPECIFY refuses once SPECIFY is (forcibly) approved", () => {
+test("advancing SPECIFY -> BUILD now succeeds (BUILD is no longer a stub); needs both SPECIFY gates", () => {
   const dir = atSpecify();
   const s = readState(dir);
+  s.gates["SPECIFY-coverage"].status = "approved";
   s.gates["SPECIFY"].status = "approved";
   s.spec.certified = true;
+  s.spec.verifyCmd = "exit 1";
   fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify(s, null, 2));
-  assert.throws(() => advanceRun({ runDir: dir, now: "t14" }), /BUILD is not yet implemented \(ships in ganjam G4\)/);
+  advanceRun({ runDir: dir, now: "t14" });
+  assert.equal(readState(dir).phase, "BUILD");
 });
 
 test("G2 convergence is FROZEN once the run is in SPECIFY", () => {

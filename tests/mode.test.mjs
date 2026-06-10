@@ -17,7 +17,8 @@ test("phaseOrderFor selects by mode; repair is the default", () => {
   assert.deepEqual(greenfieldPhaseOrder, ["GROUND", "CONVERGE", "SPECIFY", "BUILD", "FINISH"]);
   assert.ok(!GREENFIELD_STUB_PHASES.has("CONVERGE"));
   assert.ok(!GREENFIELD_STUB_PHASES.has("SPECIFY"));
-  assert.ok(GREENFIELD_STUB_PHASES.has("BUILD"));
+  assert.ok(!GREENFIELD_STUB_PHASES.has("BUILD"));
+  assert.equal(GREENFIELD_STUB_PHASES.size, 0);
 });
 
 test("a greenfield run starts at GROUND with both gates and a grounding block", () => {
@@ -43,6 +44,7 @@ test("advancing GROUND -> CONVERGE now succeeds (CONVERGE is no longer a stub)",
   const dir = createRun({ projectRoot: proj(), runId: "r1", mode: "greenfield", now: "t0" });
   const s = readState(dir);
   s.gates["GROUND"].status = "approved";
+  s.gates["GROUND-scope"].status = "approved";
   fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify(s, null, 2));
   advanceRun({ runDir: dir, now: "t1" });
   assert.equal(readState(dir).phase, "CONVERGE");

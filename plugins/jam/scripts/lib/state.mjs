@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { phaseOrderFor } from "./mode.mjs";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
 const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded", "shortlisted", "contested", "decided", "covered", "specified"];
@@ -53,6 +54,9 @@ export function validateState(state) {
   }
   if ("mode" in state && !["repair", "greenfield"].includes(state.mode)) {
     errors.push(`invalid mode: ${state.mode}`);
+  }
+  if (typeof state.phase === "string" && state.mode && !phaseOrderFor(state.mode).includes(state.phase)) {
+    errors.push(`phase ${state.phase} is not a valid phase for mode ${state.mode}`);
   }
   for (const [id, g] of Object.entries(state.gates ?? {})) {
     if (!VALID_MODES.includes(g.mode)) errors.push(`gate ${id}: invalid mode ${g.mode}`);
@@ -143,6 +147,15 @@ export function validateState(state) {
     if (!state.spec || state.spec.certified !== true) {
       errors.push("SPECIFY gate is specified/approved but spec is missing or not certified");
     }
+  }
+  if (state.mode === "greenfield" && (state.phase === "BUILD" || state.phase === "FINISH")) {
+    if (!state.spec || state.spec.certified !== true) errors.push("greenfield BUILD: spec must be certified");
+    const sv = state.spec && state.spec.verifyCmd;
+    const pv = state.plan && state.plan.verifyCmd;
+    if (typeof sv !== "string" || sv.length === 0) errors.push("greenfield BUILD: spec.verifyCmd (certified SSOT) is required");
+    if (typeof pv !== "string" || pv.length === 0) errors.push("greenfield BUILD: plan.verifyCmd is required");
+    if (typeof sv === "string" && typeof pv === "string" && sv !== pv) errors.push("greenfield BUILD: plan.verifyCmd must equal the certified spec.verifyCmd (SSOT)");
+    if (!state.gates || !state.gates["BUILD-plan"]) errors.push("greenfield BUILD: a BUILD-plan gate is required");
   }
   return errors;
 }

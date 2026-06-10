@@ -3,7 +3,7 @@ import { evaluateGate } from "./gate.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { allSprintsDone } from "./sprint.mjs";
 import { auditRun } from "./audit.mjs";
-import { phaseOrderFor, GREENFIELD_STUB_PHASES, GREENFIELD_STUB_SLICE } from "./mode.mjs";
+import { phaseOrderFor, GREENFIELD_STUB_PHASES, GREENFIELD_STUB_SLICE, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
 
 export { repairPhaseOrder } from "./mode.mjs";
 
@@ -13,9 +13,21 @@ export function advancePhase(state) {
   if (i === -1) throw new Error(`advancePhase: ${state.phase} is not a phase in mode ${state.mode ?? "repair"}`);
   const next = order[i + 1];
   if (!next) throw new Error(state.mode === "greenfield" ? `already at the final phase (${state.phase})` : `already at the final repair phase (${state.phase})`);
-  if (state.phase === "IMPLEMENT") {
-    if (!allSprintsDone(state)) throw new Error(`cannot advance from IMPLEMENT: not all sprints done`);
-  } else {
+  if (state.phase === "IMPLEMENT" || (state.mode === "greenfield" && state.phase === "BUILD")) {
+    if (!allSprintsDone(state)) throw new Error(`cannot advance from ${state.phase}: not all sprints done`);
+  }
+  if (state.mode === "greenfield") {
+    for (const id of (REQUIRED_GREENFIELD_GATES[state.phase] ?? [])) {
+      if (!state.gates[id]) throw new Error(`cannot advance from ${state.phase}: required gate ${id} is missing`);
+    }
+    // I2: every gate of the current phase (main + sub-gates) must be approved before advancing
+    for (const id of Object.keys(state.gates)) {
+      if (id === state.phase || id.startsWith(state.phase + "-")) {
+        const { allowed, reason } = evaluateGate(state, id);
+        if (!allowed) throw new Error(`cannot advance from ${state.phase}: ${reason}`);
+      }
+    }
+  } else if (state.phase !== "IMPLEMENT") {
     const { allowed, reason } = evaluateGate(state, state.phase);
     if (!allowed) throw new Error(`cannot advance from ${state.phase}: ${reason}`);
   }
@@ -32,6 +44,12 @@ export function advancePhase(state) {
       addGate(state, "SPECIFY-coverage", "human", "covered");
       addGate(state, "SPECIFY", "human", "specified");
       state.spec = { verifyCmd: null, checks: [], redProof: null, gameability: null, certified: false };
+    } else if (next === "BUILD") {
+      if (!state.spec || state.spec.certified !== true || !state.spec.verifyCmd) {
+        throw new Error("cannot enter BUILD: SPECIFY has not certified a verifyCmd SSOT");
+      }
+      state.plan = { verifyCmd: state.spec.verifyCmd, sprints: [] };   // locked to the certified SSOT
+      addGate(state, "BUILD-plan", "human", "planned");
     }
   } else if (next !== "IMPLEMENT" && next !== "FINISH") {
     const approveFrom = next === "VERIFY" ? "verified" : next === "PLAN" ? "planned" : "rendered";
@@ -43,7 +61,7 @@ export function advancePhase(state) {
 export function advanceRun({ runDir: dir, now }) {
   const state = readState(dir);
   const from = state.phase;
-  if (state.phase === "IMPLEMENT") {
+  if (state.phase === "IMPLEMENT" || (state.mode === "greenfield" && state.phase === "BUILD")) {
     const audit = auditRun({ runDir: dir });
     if (!audit.ok) throw new Error(`cannot advance to FINISH: audit failed: ${audit.failures.join("; ")}`);
   }

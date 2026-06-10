@@ -1,11 +1,11 @@
 ---
 name: jam-greenfield
-description: Use to run ganjam's greenfield mode — the GROUND phase that turns a raw intent into an evidence-backed, human-ratified grounded-intent via two adversarial groundings and a claim-ledger. Invoked by `jam start --mode greenfield`.
+description: Use to run ganjam's greenfield mode — the full GROUND→CONVERGE→SPECIFY→BUILD→FINISH loop that turns a raw intent into an evidence-backed, human-ratified build through a locked verifyCmd and gated sprint loop. Invoked by `jam start --mode greenfield`.
 ---
 
-# jam — greenfield mode (GROUND phase)
+# jam — greenfield mode
 
-You drive ganjam's **greenfield** mode: build-from-intent. This is the sibling of repair mode (see `jam-orchestrator`). G1 implements the first phase, **GROUND**; `CONVERGE/SPECIFY/BUILD` are not yet implemented and `jam advance` will say so.
+You drive ganjam's **greenfield** mode: build-from-intent. This is the sibling of repair mode (see `jam-orchestrator`). The full `GROUND → CONVERGE → SPECIFY → BUILD → FINISH` loop is live: ground intent, converge on one decision, certify the global verifyCmd SSOT, then build through the gated sprint loop to FINISH.
 
 **Claude is the brain, Codex is the independent adversary/researcher, the human is the director** who ratifies at two gates. Agent agreement is never authority (G0 still governs any irreversible probe command — declare it via `jam propose-action`).
 
@@ -47,7 +47,15 @@ SPECIFY authors the project's GLOBAL `verifyCmd` as a human-ratified SSOT, prove
 2. **Red-first** — `jam specify redproof` runs the verifyCmd on the un-built project; it MUST exit non-zero (a verifyCmd that already passes tests nothing).
 3. **Gameability audit** — invoke `superpowers:verification-before-completion`; Codex (independent) attacks each check (hollow? tautological? can verifyCmd pass without the goal?) and returns a verdict. `jam specify gameability --file {reviewer:"codex", author:"claude", survivingFindings, findings:[...]}`. A surviving finding means fix the suite (re-`coverage`, which re-arms) and re-audit.
 4. **Certify** — `jam specify certify` flips SPECIFY to `specified` only if coverage-approved, every dimension covered, red-first non-zero, and zero surviving findings.
-5. **Ratify the SSOT** — **`jam approve SPECIFY`**, then `jam advance` (reports `BUILD` ships in G4). The certified verifyCmd is the SSOT the build will be gated by. Editing the suite after certify re-arms the gate.
+5. **Ratify the SSOT** — **`jam approve SPECIFY`**, then `jam advance` enters BUILD. The certified verifyCmd is the SSOT the build will be gated by. Editing the suite after certify re-arms the gate.
+
+## The BUILD flow (after SPECIFY's verifyCmd SSOT is ratified + advanced)
+
+BUILD builds the project to the certified bar, reusing the repair sprint loop. The verifyCmd is LOCKED to the SSOT.
+
+1. **Decompose** — invoke `superpowers:writing-plans`. Break the build into sprints tied to the decision + the SSOT's checks. `jam build plan --file {sprints:[{id,title,acceptanceCriteria,needs}]}` (verifyCmd is auto-locked to the certified SSOT — you cannot change it). Present to the human: **`jam approve BUILD-plan`**.
+2. **Build each sprint** (dependency-ordered) — the SAME gated loop as repair: `jam sprint <id> --start`; `jam codex-run --sprint <id>` (Codex builds; role-binding); `jam sprint <id> --verify` (runs the locked SSOT verifyCmd; passes only on exit 0); `jam sprint <id> --done` (refuses unless verified AND Codex-authored). Any irreversible action still goes through `jam propose-action`/`ratify` (G0).
+3. **Finish** — when every sprint is done, `jam advance` runs the run-honesty audit over the whole greenfield run and reaches **FINISH**. The project is built to exactly the certified bar.
 
 ## Status
-`jam status` shows `mode greenfield · phase GROUND`, the grounding summary (problem/dimensions/claims-by-status/converged), and both gates.
+`jam status` shows the active greenfield phase, current gates, and phase-specific artifacts including grounding, convergence, specification, and BUILD sprints.

@@ -1,14 +1,30 @@
 import fs from "node:fs";
 import { readLedger } from "./ledger.mjs";
 import { readState } from "./state.mjs";
+import { repairPhaseOrder, greenfieldPhaseOrder, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
+import { allSprintsDone } from "./sprint.mjs";   // run-honesty: a finished greenfield BUILD has all sprints done
 
-const ORDER = ["DIAGNOSE", "VERIFY", "PLAN", "IMPLEMENT", "FINISH"];
-const PRODUCING = { DIAGNOSE: "digest-rendered", VERIFY: "verification", PLAN: "plan-recorded" };
+const PRODUCING_REPAIR = { DIAGNOSE: "digest-rendered", VERIFY: "verification", PLAN: "plan-recorded" };
+// NOTE: no BUILD entry — the BUILD->FINISH advance is audited AFTER it's written (advanceRun audits before
+// advancePhase appends the ledger entry), so a BUILD producer check here would never fire (same as repair
+// IMPLEMENT, which has no producer). BUILD->FINISH is gated by allSprintsDone + the BUILD-plan gate +
+// the per-sprint authorship/evidence checks below. The GROUND/CONVERGE/SPECIFY producers ARE checked at
+// the FINISH-time audit because their phase-advanced entries are already in the ledger.
+const PRODUCING_GREENFIELD = { GROUND: "grounding-converged", CONVERGE: "convergence-decided", SPECIFY: "spec-certified" };
+// These producing artifacts carry no gateId — match them by type only (as plan-recorded already is for repair PLAN).
+const GATEID_AGNOSTIC = new Set(["plan-recorded", "grounding-converged", "convergence-decided", "spec-certified"]);
 
 export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
   const failures = [];
+  const greenfield = state.mode === "greenfield";
+  const ORDER = greenfield ? greenfieldPhaseOrder : repairPhaseOrder;
+  const PRODUCING = greenfield ? PRODUCING_GREENFIELD : PRODUCING_REPAIR;
 
-  let expectedFrom = "DIAGNOSE";
+  if (typeof state.phase === "string" && !ORDER.includes(state.phase)) {
+    failures.push(`ordering: phase ${state.phase} is not a valid phase for this mode`);
+  }
+
+  let expectedFrom = ORDER[0];
   ledger.forEach((e, i) => {
     if (e.type !== "phase-advanced") return;
     if (ORDER.indexOf(e.to) !== ORDER.indexOf(e.from) + 1) {
@@ -25,7 +41,7 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
       const producedIdx = ledger.findIndex((x, xi) =>
         xi < i &&
         x.type === producing &&
-        (producing === "plan-recorded" ? true : x.gateId === e.from) &&
+        (GATEID_AGNOSTIC.has(producing) ? true : x.gateId === e.from) &&
         (producing === "verification" ? x.blockers === 0 : true)
       );
       if (producedIdx === -1) failures.push(`ordering: advance from ${e.from} has no valid preceding ${producing}`);
@@ -36,17 +52,93 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     }
   });
 
+  if (greenfield) {
+    ledger.forEach((e, i) => {
+      if (e.type !== "phase-advanced") return;
+      for (const gid of (REQUIRED_GREENFIELD_GATES[e.from] ?? [])) {
+        const idx = ledger.findIndex((x, xi) => xi < i && x.type === "approval" && x.gateId === gid);
+        if (idx === -1) failures.push(`ordering: greenfield phase ${e.from} advanced without a preceding approval for required gate ${gid}`);
+      }
+    });
+  }
+
+  // BUILD's producer/approval is MANDATORY for any greenfield run at or past BUILD — keyed on PHASE, not on
+  // gate presence, so a forged state that simply OMITS the BUILD-plan gate cannot slip past this check.
+  const phaseIdx = ORDER.indexOf(state.phase);
+  if (greenfield && phaseIdx >= ORDER.indexOf("BUILD")) {
+    const gateOk = state.gates && state.gates["BUILD-plan"] && state.gates["BUILD-plan"].status === "approved";
+    if (!gateOk) failures.push("ordering: greenfield BUILD requires an approved BUILD-plan gate");
+    const apprIdx = ledger.findIndex((x) => x.type === "approval" && x.gateId === "BUILD-plan");
+    const planIdx = ledger.findIndex((x) => x.type === "plan-recorded");
+    const cert = [...ledger].reverse().find((x) => x.type === "spec-certified");
+    if (cert && typeof cert.verifyCmd === "string" && state.spec && cert.verifyCmd !== state.spec.verifyCmd) {
+      failures.push("ordering: state.spec.verifyCmd does not match the certified verifyCmd in the ledger");
+    }
+    if (planIdx === -1) failures.push("ordering: greenfield BUILD requires plan-recorded in the ledger");
+    if (apprIdx === -1) failures.push("ordering: greenfield BUILD requires a BUILD-plan approval entry");
+    else if (planIdx !== -1 && planIdx >= apprIdx) failures.push("ordering: BUILD-plan approval is not preceded by plan-recorded");
+    // If BUILD->FINISH has already been recorded (a completed run audited via `jam audit`), both the
+    // plan-recorded AND its approval must PRECEDE that advance — a forged ledger cannot advance first
+    // and back-fill the plan afterward.
+    const finishIdx = ledger.findIndex((x) => x.type === "phase-advanced" && x.from === "BUILD" && x.to === "FINISH");
+    if (finishIdx !== -1) {
+      if (planIdx === -1 || planIdx >= finishIdx) failures.push("ordering: BUILD->FINISH advanced without a preceding plan-recorded");
+      if (apprIdx === -1 || apprIdx >= finishIdx) failures.push("ordering: BUILD->FINISH advanced without a preceding BUILD-plan approval");
+    }
+    // A finished greenfield BUILD (BUILD->FINISH recorded, or the run is already at FINISH) must have ALL
+    // build sprints done — the standalone `jam audit` must be as strict as the live advanceRun's allSprintsDone.
+    if ((finishIdx !== -1 || state.phase === "FINISH") && !allSprintsDone(state)) {
+      failures.push("ordering: greenfield BUILD->FINISH requires all build sprints done");
+    }
+    let lastBuildApprIdx = -1;
+    ledger.forEach((x, xi) => { if (x.type === "approval" && x.gateId === "BUILD-plan") lastBuildApprIdx = xi; });
+    if (lastBuildApprIdx !== -1) {
+      ledger.forEach((x, xi) => {
+        if (x.type === "sprint-started" && xi < lastBuildApprIdx) {
+          failures.push(`ordering: sprint ${x.sprintId} started before the BUILD-plan was approved`);
+        }
+      });
+    }
+    if (lastBuildApprIdx !== -1) {
+      const mutatedAfter = ledger.findIndex((x, xi) => xi > lastBuildApprIdx && x.type === "plan-recorded");
+      if (mutatedAfter !== -1) failures.push("ordering: build plan was re-recorded after its BUILD-plan approval without re-approval");
+    }
+    let approvedPlan = null;
+    ledger.forEach((x, xi) => { if (x.type === "plan-recorded" && (lastBuildApprIdx === -1 || xi <= lastBuildApprIdx)) approvedPlan = x; });
+    if (approvedPlan && Array.isArray(approvedPlan.sprintIds)) {
+      const approvedSet = new Set(approvedPlan.sprintIds);
+      const stateSprints = state.plan?.sprints ?? [];
+      const stateIds = stateSprints.map((s) => s.id);
+      for (const id of approvedPlan.sprintIds) {
+        if (!stateIds.includes(id)) failures.push(`consistency: approved build sprint ${id} is missing from state.plan`);
+      }
+      for (const sp of stateSprints) {
+        if (sp.provenance === "planned" && !approvedSet.has(sp.id)) {
+          failures.push(`consistency: state.plan has planned sprint ${sp.id} not in the approved build plan`);
+        }
+      }
+    }
+  }
+
+  if (greenfield && typeof state.phase === "string" && ORDER.includes(state.phase) && expectedFrom !== state.phase) {
+    failures.push(`ordering: greenfield phase history is incomplete — the ledger only advanced to ${expectedFrom}, but the run is at ${state.phase} (a phase was skipped or its advance is missing)`);
+  }
+
   const sprints = state.plan?.sprints ?? [];
   ledger.forEach((e, d) => {
     if (e.type !== "sprint-done") return;
     const S = e.sprintId;
     const boundIdx = ledger.findIndex((x, xi) => xi < d && x.type === "codex-bound" && x.sprintId === S);
+    const startedIdx = ledger.findIndex((x, xi) => xi < d && x.type === "sprint-started" && x.sprintId === S);
     if (boundIdx === -1) failures.push(`authorship: sprint-done ${S} has no preceding codex-bound`);
+    else if (startedIdx !== -1 && boundIdx < startedIdx) failures.push(`ordering: sprint ${S} was bound before it was started`);
+    if (startedIdx === -1) failures.push(`ordering: sprint-done ${S} has no preceding sprint-started`);
     const sprint = sprints.find((s) => s.id === S);
     const transcriptOk = (sprint?.codexSessions ?? []).some((s) => transcriptExists(s.transcriptPath));
     if (!transcriptOk) failures.push(`authorship: sprint ${S} has no bound session with an existing transcript`);
     const evIdx = ledger.findIndex((x, xi) => xi < d && x.type === "evidence" && x.sprintId === S && x.gateId === `sprint-${S}` && x.exitCode === 0);
     if (evIdx === -1) failures.push(`evidence: sprint-done ${S} has no preceding passing evidence (exit 0)`);
+    else if (startedIdx !== -1 && startedIdx > evIdx) failures.push(`ordering: sprint ${S} evidence was recorded before it was started`);
   });
 
   for (const sp of sprints) {
@@ -62,7 +154,15 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
         failures.push(`provenance: sprint ${sp.id} is ${sp.status} but has no valid provenance`);
       } else if (sp.provenance === "promoted") {
         if (!promotions.some((p) => p.id === sp.id)) failures.push(`provenance: promoted sprint ${sp.id} has no promotion decision`);
-        if (!ledger.some((x) => x.type === "sprint-promoted" && x.id === sp.id)) failures.push(`provenance: promoted sprint ${sp.id} has no sprint-promoted ledger entry`);
+        const promIdx = ledger.findIndex((x) => x.type === "sprint-promoted" && x.id === sp.id);
+        if (promIdx === -1) {
+          failures.push(`provenance: promoted sprint ${sp.id} has no sprint-promoted ledger entry`);
+        } else {
+          const stIdx = ledger.findIndex((x) => x.type === "sprint-started" && x.sprintId === sp.id);
+          const dnIdx = ledger.findIndex((x) => x.type === "sprint-done" && x.sprintId === sp.id);
+          if (stIdx !== -1 && promIdx > stIdx) failures.push(`ordering: promoted sprint ${sp.id} was started before it was promoted`);
+          if (dnIdx !== -1 && promIdx > dnIdx) failures.push(`ordering: promoted sprint ${sp.id} was done before it was promoted`);
+        }
       }
     }
   }
