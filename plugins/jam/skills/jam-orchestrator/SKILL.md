@@ -7,6 +7,8 @@ description: Use to run a jam repair-mode loop — the gated DIAGNOSE→VERIFY�
 
 You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the brain** (root-cause analysis, digest assembly, gate management); **Codex is the independent adversary/grounder** (parallel diagnosis via jam's own codex engine, adversarial refutation via `/codex:adversarial-review`); **the user supervises and approves each gate.**
 
+> This skill drives ganjam's **repair (jam) mode**. For build-from-intent, see the `jam-greenfield` skill (`jam start --mode greenfield`).
+
 ## Non-negotiables
 
 - **Never advance a phase manually.** Every state transition goes through `jam advance`. If `jam advance` reports the gate is unsatisfied, do not proceed — fix the deficiency and re-run.
