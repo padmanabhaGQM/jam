@@ -139,6 +139,22 @@ test("KEY RED-TEAM: an approved build plan with a missing state sprint fails the
   assert.ok(r.failures.some((f) => /approved build sprint b2 is missing/.test(f)));
 });
 
+test("KEY RED-TEAM: a build plan re-recorded after BUILD-plan approval fails the audit", () => {
+  const led = gfLedger();
+  const apprIdx = led.findIndex((e) => e.type === "approval" && e.gateId === "BUILD-plan");
+  led.splice(apprIdx + 1, 0, { type: "plan-recorded", sprints: 1, sprintIds: ["forged"] });
+  const r = evaluateAudit({ ledger: led, state: gfState(), transcriptExists: yes });
+  assert.ok(r.failures.some((f) => /re-recorded after its BUILD-plan approval/.test(f)));
+});
+
+test("KEY RED-TEAM: a planned state sprint outside the approved build plan fails the audit", () => {
+  const led = gfLedger().filter((e) => !(e.type === "phase-advanced" && e.from === "BUILD" && e.to === "FINISH"));
+  const st = { ...gfState(), phase: "BUILD" };
+  st.plan.sprints.push({ id: "b2", status: "pending", provenance: "planned" });
+  const r = evaluateAudit({ ledger: led, state: st, transcriptExists: yes });
+  assert.ok(r.failures.some((f) => /not in the approved build plan/.test(f)));
+});
+
 test("KEY RED-TEAM: a greenfield BUILD state with no certified spec.verifyCmd fails validation", () => {
   const st = { ...gfState(), phase: "BUILD", spec: { certified: true } };
   assert.ok(validateState(st).some((e) => /spec\.verifyCmd.*required/.test(e)));

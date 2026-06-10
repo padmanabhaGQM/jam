@@ -86,13 +86,25 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     if ((finishIdx !== -1 || state.phase === "FINISH") && !allSprintsDone(state)) {
       failures.push("ordering: greenfield BUILD->FINISH requires all build sprints done");
     }
-    const buildApprIdx = ledger.findIndex((x) => x.type === "approval" && x.gateId === "BUILD-plan");
+    let lastBuildApprIdx = -1;
+    ledger.forEach((x, xi) => { if (x.type === "approval" && x.gateId === "BUILD-plan") lastBuildApprIdx = xi; });
+    if (lastBuildApprIdx !== -1) {
+      const mutatedAfter = ledger.findIndex((x, xi) => xi > lastBuildApprIdx && x.type === "plan-recorded");
+      if (mutatedAfter !== -1) failures.push("ordering: build plan was re-recorded after its BUILD-plan approval without re-approval");
+    }
     let approvedPlan = null;
-    ledger.forEach((x, xi) => { if (x.type === "plan-recorded" && (buildApprIdx === -1 || xi <= buildApprIdx)) approvedPlan = x; });
+    ledger.forEach((x, xi) => { if (x.type === "plan-recorded" && (lastBuildApprIdx === -1 || xi <= lastBuildApprIdx)) approvedPlan = x; });
     if (approvedPlan && Array.isArray(approvedPlan.sprintIds)) {
-      const have = new Set((state.plan?.sprints ?? []).map((s) => s.id));
+      const approvedSet = new Set(approvedPlan.sprintIds);
+      const stateSprints = state.plan?.sprints ?? [];
+      const stateIds = stateSprints.map((s) => s.id);
       for (const id of approvedPlan.sprintIds) {
-        if (!have.has(id)) failures.push(`consistency: approved build sprint ${id} is missing from state.plan`);
+        if (!stateIds.includes(id)) failures.push(`consistency: approved build sprint ${id} is missing from state.plan`);
+      }
+      for (const sp of stateSprints) {
+        if (sp.provenance === "planned" && !approvedSet.has(sp.id)) {
+          failures.push(`consistency: state.plan has planned sprint ${sp.id} not in the approved build plan`);
+        }
       }
     }
   }
@@ -114,6 +126,7 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     if (!transcriptOk) failures.push(`authorship: sprint ${S} has no bound session with an existing transcript`);
     const evIdx = ledger.findIndex((x, xi) => xi < d && x.type === "evidence" && x.sprintId === S && x.gateId === `sprint-${S}` && x.exitCode === 0);
     if (evIdx === -1) failures.push(`evidence: sprint-done ${S} has no preceding passing evidence (exit 0)`);
+    else if (startedIdx !== -1 && startedIdx > evIdx) failures.push(`ordering: sprint ${S} evidence was recorded before it was started`);
   });
 
   for (const sp of sprints) {
@@ -129,7 +142,15 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
         failures.push(`provenance: sprint ${sp.id} is ${sp.status} but has no valid provenance`);
       } else if (sp.provenance === "promoted") {
         if (!promotions.some((p) => p.id === sp.id)) failures.push(`provenance: promoted sprint ${sp.id} has no promotion decision`);
-        if (!ledger.some((x) => x.type === "sprint-promoted" && x.id === sp.id)) failures.push(`provenance: promoted sprint ${sp.id} has no sprint-promoted ledger entry`);
+        const promIdx = ledger.findIndex((x) => x.type === "sprint-promoted" && x.id === sp.id);
+        if (promIdx === -1) {
+          failures.push(`provenance: promoted sprint ${sp.id} has no sprint-promoted ledger entry`);
+        } else {
+          const stIdx = ledger.findIndex((x) => x.type === "sprint-started" && x.sprintId === sp.id);
+          const dnIdx = ledger.findIndex((x) => x.type === "sprint-done" && x.sprintId === sp.id);
+          if (stIdx !== -1 && promIdx > stIdx) failures.push(`ordering: promoted sprint ${sp.id} was started before it was promoted`);
+          if (dnIdx !== -1 && promIdx > dnIdx) failures.push(`ordering: promoted sprint ${sp.id} was done before it was promoted`);
+        }
       }
     }
   }

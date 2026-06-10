@@ -95,9 +95,26 @@ test("a promoted sprint with no decision / no ledger trail fails the audit", () 
 });
 
 test("a promoted sprint WITH a decision + ledger trail passes provenance", () => {
-  const ledger = [...goodLedger(), { type: "sprint-promoted", id: "fix-1", reason: "r" }];
+  const ledger = goodLedger();
+  const startIdx = ledger.findIndex((e) => e.type === "sprint-started" && e.sprintId === "fix-1");
+  ledger.splice(startIdx, 0, { type: "sprint-promoted", id: "fix-1", reason: "r" });
   const state = { plan: { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", provenance: "promoted", codexSessions: [{ sessionId: "s", transcriptPath: "/x/r.jsonl", at: "t" }] }] }, promotions: [{ id: "fix-1", discoveredBy: "orchestrator", reason: "r", decidedBy: "orchestrator", at: "t" }] };
   assert.equal(evaluateAudit({ ledger, state, transcriptExists: yes }).ok, true);
+});
+
+test("a promoted sprint started before its sprint-promoted ledger entry fails ordering", () => {
+  const ledger = [...goodLedger(), { type: "sprint-promoted", id: "fix-1", reason: "r" }];
+  const state = { plan: { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", provenance: "promoted", codexSessions: [{ sessionId: "s", transcriptPath: "/x/r.jsonl", at: "t" }] }] }, promotions: [{ id: "fix-1", discoveredBy: "orchestrator", reason: "r", decidedBy: "orchestrator", at: "t" }] };
+  assert.match(evaluateAudit({ ledger, state, transcriptExists: yes }).failures.join(" | "), /started before it was promoted/);
+});
+
+test("sprint evidence recorded before sprint-started fails ordering", () => {
+  const ledger = goodLedger();
+  const startIdx = ledger.findIndex((e) => e.type === "sprint-started" && e.sprintId === "fix-1");
+  const evidenceIdx = ledger.findIndex((e) => e.type === "evidence" && e.sprintId === "fix-1");
+  const [evidence] = ledger.splice(evidenceIdx, 1);
+  ledger.splice(startIdx, 0, evidence);
+  assert.match(fails(ledger), /evidence was recorded before it was started/);
 });
 
 test("audit fails when a sprint started before its dependency was done", () => {
