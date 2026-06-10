@@ -69,7 +69,7 @@ export function recordRedProof({ runDir: dir, cwd, now }) {
 export function recordGameability({ runDir: dir, reviewer, author, survivingFindings, findings, now }) {
   if (reviewer !== "codex") throw new Error(`recordGameability: the gameability audit must be authored by codex (reviewer=${reviewer})`);
   if (author && author === reviewer) throw new Error("recordGameability: reviewer must differ from author (anti-collusion)");
-  if (typeof survivingFindings !== "number" || survivingFindings < 0) throw new Error("recordGameability: a numeric survivingFindings (>=0) is required");
+  if (!Number.isInteger(survivingFindings) || survivingFindings < 0) throw new Error("recordGameability: a non-negative integer survivingFindings is required");
   const state = readState(dir);
   requireSpecify(state);
   if (state.gates["SPECIFY-coverage"].status !== "approved") throw new Error("recordGameability: the SPECIFY-coverage gate must be approved first");
@@ -100,6 +100,9 @@ export function certifyVerifyCmd({ runDir: dir, cwd, now }) {
   if (!sp.redProof) throw new Error("certifyVerifyCmd: no red-first proof — run jam specify redproof");
   const live = runVerification(sp.verifyCmd, cwd ?? dir);
   if (live.exitCode === 0) throw new Error("certifyVerifyCmd: verifyCmd passes right now (exit 0) — it must be RED on the un-built project");
+  if (live.exitCode < 0 || live.exitCode === 126 || live.exitCode === 127) {
+    throw new Error(`certifyVerifyCmd: verifyCmd did not run (exit ${live.exitCode}) — a RED proof must come from a command that RUNS and fails its checks, not a missing or unrunnable command`);
+  }
   // (e) gameability
   if (!sp.gameability) throw new Error("certifyVerifyCmd: no gameability verdict — run the Codex gameability audit");
   if (sp.gameability.reviewer !== "codex") throw new Error("certifyVerifyCmd: the gameability verdict must be Codex-authored");

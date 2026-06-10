@@ -139,9 +139,10 @@ export function validateState(state) {
       }
     }
   }
-  if (state.spec && state.gates && state.gates["SPECIFY"] &&
-      ["specified", "approved"].includes(state.gates["SPECIFY"].status) && state.spec.certified !== true) {
-    errors.push("SPECIFY gate is specified/approved but spec.certified is not true");
+  if (state.gates && state.gates["SPECIFY"] && ["specified", "approved"].includes(state.gates["SPECIFY"].status)) {
+    if (!state.spec || state.spec.certified !== true) {
+      errors.push("SPECIFY gate is specified/approved but spec is missing or not certified");
+    }
   }
   return errors;
 }
