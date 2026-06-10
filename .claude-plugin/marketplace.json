@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Neel's Claude Code plugins.",
-    "version": "0.12.0"
+    "version": "0.13.0"
   },
   "plugins": [
     {
       "name": "jam",
       "description": "Honest, controlled Claude–Codex build loop. Claude is the brain (diagnose/plan/review), Codex is the hands (implement), enforced by a deterministic control surface (gates, evidence, ledger, run-honesty audit, scope governance, sprint DAG, irreversible-action hard-block).",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "author": {
         "name": "Padmanabha Banerjee (Neel)"
       },

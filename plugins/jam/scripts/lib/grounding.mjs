@@ -6,6 +6,7 @@ function nowIso(now) { return now ?? new Date().toISOString(); }
 
 function requireGreenfield(state) {
   if (state.mode !== "greenfield") throw new Error(`grounding applies only to greenfield runs (mode=${state.mode ?? "repair"})`);
+  if (state.phase !== "GROUND") throw new Error(`grounding is frozen after the GROUND phase (phase=${state.phase}) — the grounded-intent cannot be changed`);
   if (!state.grounding) throw new Error("grounding block missing from state");
 }
 

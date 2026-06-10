@@ -28,8 +28,8 @@ test("greenfield run drives GROUND end-to-end via the CLI to the CONVERGE-stub b
   assert.equal(jam(root, ["approve", "GROUND"]).status, 0);
 
   const adv = jam(root, ["advance"]);
-  assert.notEqual(adv.status, 0);
-  assert.match(adv.stderr + adv.stdout, /CONVERGE is not yet implemented \(ships in ganjam G2\)/);
+  assert.equal(adv.status, 0);
+  assert.match(jam(root, ["status"]).stdout, /phase CONVERGE/);
 });
 
 test("ground refute drops a claim; converge refuses an unsupported feasibility claim", () => {

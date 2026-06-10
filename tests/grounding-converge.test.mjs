@@ -54,10 +54,11 @@ test("convergence with no problem set is refused", () => {
   assert.throws(() => convergeGrounding({ runDir: dir }), /problem/);
 });
 
-test("after convergence + approval, advancing hits the CONVERGE stub", () => {
+test("after convergence + approval, advancing GROUND -> CONVERGE now succeeds", () => {
   const dir = gfRun(); scoped(dir);
   addClaim({ runDir: dir, id: "c1", text: "x", kind: "framing", status: "evidenced", source: "both" });
   convergeGrounding({ runDir: dir, now: "t3" });
   recordApproval({ runDir: dir, gateId: "GROUND", who: "user", now: "t4" });
-  assert.throws(() => advanceRun({ runDir: dir, now: "t5" }), /CONVERGE is not yet implemented \(ships in ganjam G2\)/);
+  advanceRun({ runDir: dir, now: "t5" });
+  assert.equal(readState(dir).phase, "CONVERGE");
 });

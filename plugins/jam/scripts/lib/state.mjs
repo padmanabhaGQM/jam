@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
-const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded"];
+const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded", "shortlisted", "contested", "decided"];
 const VALID_ACTION_STATUSES = new Set(["proposed", "ratified", "denied", "allowed"]);
 
 export function createInitialState({ runId, topic, now, mode }) {
@@ -115,6 +115,22 @@ export function validateState(state) {
         errors.push(`grounding claim ${c.id}: an evidenced feasibility claim must carry an evidenceRef`);
       }
     }
+  }
+  if (state.convergence && Array.isArray(state.convergence.ledger)) {
+    for (const r of state.convergence.ledger) {
+      const ok = r && typeof r.dimension === "string" && ["satisfied", "at-risk", "unmet"].includes(r.status);
+      if (!ok) { errors.push(`convergence ledger row invalid: ${r && r.dimension ? r.dimension : "(unnamed)"}`); continue; }
+      if (r.status === "satisfied" && (typeof r.evidenceRef !== "string" || r.evidenceRef.length === 0)) {
+        errors.push(`convergence ledger ${r.dimension}: a 'satisfied' dimension must carry an evidenceRef`);
+      }
+      if ((r.status === "unmet" || r.status === "at-risk") && r.accepted !== true) {
+        errors.push(`convergence ledger ${r.dimension}: a '${r.status}' dimension must be accepted (accepted:true)`);
+      }
+    }
+  }
+  if (state.convergence && state.gates && state.gates["CONVERGE"] &&
+      ["decided", "approved"].includes(state.gates["CONVERGE"].status) && state.convergence.decided !== true) {
+    errors.push("CONVERGE gate is decided/approved but convergence.decided is not true");
   }
   return errors;
 }

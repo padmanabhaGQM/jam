@@ -3,8 +3,8 @@ export const repairPhaseOrder = ["DIAGNOSE", "VERIFY", "PLAN", "IMPLEMENT", "FIN
 export const greenfieldPhaseOrder = ["GROUND", "CONVERGE", "SPECIFY", "BUILD", "FINISH"];
 
 // Greenfield phases that are defined but not yet implemented (ship in later ganjam slices).
-export const GREENFIELD_STUB_PHASES = new Set(["CONVERGE", "SPECIFY", "BUILD"]);
-export const GREENFIELD_STUB_SLICE = { CONVERGE: "G2", SPECIFY: "G3", BUILD: "G4" };
+export const GREENFIELD_STUB_PHASES = new Set(["SPECIFY", "BUILD"]);
+export const GREENFIELD_STUB_SLICE = { SPECIFY: "G3", BUILD: "G4" };
 
 // repair is the default for any run without an explicit greenfield mode (incl. the legacy ALIGN flow).
 export function phaseOrderFor(mode) {

@@ -5,6 +5,13 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.13.0 — CONVERGE phase (ganjam G2)
+- Greenfield's second phase: adversarial decision-convergence from the grounded-intent to one evidence-backed, human-ratified decision.
+- Two independent decisions (Claude + Codex); agreement converges, disagreement raises a `CONVERGE-tiebreak` gate the human rules.
+- Decision-ledger covers every G1 dimension; `satisfied` requires a registered real Codex spike transcript, `unmet` requires explicit acceptance, every G1 open-unknown must be accepted. Any post-decision mutation re-arms the gate.
+- Three gates: `CONVERGE-shortlist` → (conditional) `CONVERGE-tiebreak` → `CONVERGE`. `jam converge shortlist|decide|tiebreak|finalize`.
+- `SPECIFY/BUILD` remain stubs (ship in G3/G4).
+
 ## 0.12.0 — Greenfield mode + GROUND phase (ganjam G1)
 - New **greenfield** mode (`jam start --mode greenfield`) alongside repair mode; `lib/mode.mjs` owns both phase orders.
 - The **GROUND** phase turns a raw intent into an evidence-backed grounded-intent via two adversarial groundings and a claim-ledger.

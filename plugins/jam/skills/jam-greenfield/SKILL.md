@@ -28,5 +28,16 @@ You drive ganjam's **greenfield** mode: build-from-intent. This is the sibling o
 4. **Converge** — `jam ground converge --file converge.json` (`{options, openUnknowns}`). This refuses unless every claim is `evidenced`/`open-unknown` and every feasibility claim has a locatable transcript. On success the `GROUND` gate flips to `grounded`.
 5. **Ratify** — present the grounded-intent to the human: **`jam approve GROUND`**. Then `jam advance` (which, in G1, reports `CONVERGE` ships in G2).
 
+## The CONVERGE flow (after GROUND is ratified + advanced)
+
+CONVERGE turns the grounded-intent into ONE evidence-backed decision via two independent decisions, a conditional tiebreak, and a decision-ledger.
+
+1. **Shortlist** — invoke `superpowers:brainstorming` to refine/synthesize G1's option-space into 1–3 serious candidates. `jam converge shortlist --file {options:[...]}`. Present to the human: **`jam approve CONVERGE-shortlist`** before spikes.
+2. **Two independent decisions** (after shortlist approved): Claude and Codex each pick ONE candidate + justify it against every dimension. Codex runs **feasibility spikes** on the riskiest dimensions via `jam codex-run` (transcripts are the evidence; consequential commands go through `jam propose-action`/`ratify`). Record each: `jam converge decide --agent <claude|codex> --file {chosen, rationale, spikes:[...]}`.
+3. **Cross-examine** — invoke `superpowers:verification-before-completion`; each attacks the other's choice.
+4. **Tiebreak (only if they disagree)** — `jam converge tiebreak --choose <option>`.
+5. **Finalize** — build the decision-ledger covering EVERY dimension. `satisfied` requires a registered, real spike transcript (`evidenceRef` listed in `spikes[]`); `unmet` requires `accepted:true`; every G1 open-unknown must be in `acceptedUnknowns`. `jam converge finalize --file {ledger:[...], spikes:[...], acceptedUnknowns:[...]}` → `CONVERGE` flips to `decided`. Any later change re-arms the gate.
+6. **Ratify** — **`jam approve CONVERGE`**, then `jam advance` (reports `SPECIFY` ships in G3).
+
 ## Status
 `jam status` shows `mode greenfield · phase GROUND`, the grounding summary (problem/dimensions/claims-by-status/converged), and both gates.

@@ -17,6 +17,7 @@ import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from
 import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { sharpenIntent, addClaim, refuteClaim, convergeGrounding } from "./lib/grounding.mjs";
+import { setShortlist, recordDecision, ruleTiebreak, convergeDecision } from "./lib/convergence.mjs";
 import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession } from "./lib/sprint.mjs";
@@ -82,6 +83,12 @@ function cmdStatus(cwd) {
     const byStatus = (g.claims ?? []).reduce((m, c) => ((m[c.status] = (m[c.status] ?? 0) + 1), m), {});
     lines.push(`mode greenfield · phase ${state.phase}`);
     lines.push(`  grounding: problem ${g.problem ? "set" : "unset"} · dimensions ${(g.dimensions ?? []).length} · claims: ${(g.claims ?? []).length}${Object.keys(byStatus).length ? " (" + Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(", ") + ")" : ""} · converged ${g.converged ? "yes" : "no"}`);
+    if (state.convergence) {
+      const c = state.convergence;
+      const byStatus = (c.ledger ?? []).reduce((m, r) => ((m[r.status] = (m[r.status] ?? 0) + 1), m), {});
+      const agreeStr = c.agree === null ? "pending" : c.agree ? "agree" : "DISAGREE";
+      lines.push(`  convergence: shortlist ${(c.shortlist ?? []).length} · decisions ${Object.keys(c.decisions ?? {}).length}/2 (${agreeStr}) · chosen ${c.chosen ?? "—"} · ledger ${(c.ledger ?? []).length}${Object.keys(byStatus).length ? " (" + Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(", ") + ")" : ""} · decided ${c.decided ? "yes" : "no"}`);
+    }
   }
   for (const [id, g] of Object.entries(state.gates)) {
     lines.push(`  gate ${id}: ${g.mode}/${g.status}`);
@@ -231,6 +238,44 @@ function cmdGround(cwd, positional, flags) {
       }
       default:
         return fail("usage: jam ground <sharpen|claim|refute|converge>");
+    }
+  } catch (e) { return fail(e.message); }
+}
+
+function cmdConverge(cwd, positional, flags) {
+  const sub = positional[0];
+  const { dir } = requireActiveRun(cwd);
+  const readFile = () => {
+    if (!flags.file) return fail("usage: jam converge <shortlist|decide|finalize> --file <json>  (tiebreak uses --choose)");
+    return JSON.parse(fs.readFileSync(flags.file, "utf8"));
+  };
+  try {
+    switch (sub) {
+      case "shortlist": {
+        const o = readFile();
+        setShortlist({ runDir: dir, options: o.options });
+        return process.stdout.write(`shortlist set; approve with: jam approve CONVERGE-shortlist\n`);
+      }
+      case "decide": {
+        if (!flags.agent) return fail("usage: jam converge decide --agent <claude|codex> --file <json>");
+        const o = readFile();
+        const s = recordDecision({ runDir: dir, agent: flags.agent, chosen: o.chosen, rationale: o.rationale, spikes: o.spikes });
+        const c = s.convergence;
+        const tail = (c.decisions.claude && c.decisions.codex) ? (c.agree ? ` — agree on ${c.chosen}` : ` — DISAGREE; rule with: jam converge tiebreak --choose <opt>`) : "";
+        return process.stdout.write(`decision recorded for ${flags.agent}${tail}\n`);
+      }
+      case "tiebreak": {
+        if (!flags.choose) return fail("usage: jam converge tiebreak --choose <option>");
+        ruleTiebreak({ runDir: dir, chosen: flags.choose });
+        return process.stdout.write(`tiebreak ruled: ${flags.choose}\n`);
+      }
+      case "finalize": {
+        const o = flags.file ? readFile() : {};
+        convergeDecision({ runDir: dir, ledger: o.ledger, spikes: o.spikes, acceptedUnknowns: o.acceptedUnknowns });
+        return process.stdout.write(`convergence decided; ratify with: jam approve CONVERGE\n`);
+      }
+      default:
+        return fail("usage: jam converge <shortlist|decide|tiebreak|finalize>");
     }
   } catch (e) { return fail(e.message); }
 }
@@ -411,6 +456,8 @@ async function main() {
       return cmdStart(cwd, positional, flags);
     case "ground":
       return cmdGround(cwd, positional, flags);
+    case "converge":
+      return cmdConverge(cwd, positional, flags);
     case "status":
       return cmdStatus(cwd);
     case "render-digest":

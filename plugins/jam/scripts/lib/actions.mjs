@@ -55,7 +55,7 @@ export function recordApproval({ runDir: dir, gateId, who, now }) {
   }
   const need = g.approveFrom ?? "rendered";
   if (g.status !== need) {
-    const what = need === "verified" ? "not verified yet" : need === "planned" ? "plan not recorded yet" : need === "ratified" ? "not ratified yet — irreversible actions need `jam ratify`, not `/jam:approve`" : need === "scoped" ? "intent not scoped yet — run `jam ground sharpen`" : need === "grounded" ? "grounding not converged yet — run `jam ground converge`" : "digest not rendered yet";
+    const what = need === "verified" ? "not verified yet" : need === "planned" ? "plan not recorded yet" : need === "ratified" ? "not ratified yet — irreversible actions need `jam ratify`, not `/jam:approve`" : need === "scoped" ? "intent not scoped yet — run `jam ground sharpen`" : need === "grounded" ? "grounding not converged yet — run `jam ground converge`" : need === "shortlisted" ? "shortlist not set yet — run `jam converge shortlist`" : need === "contested" ? "tiebreak not ruled yet — run `jam converge tiebreak --choose <opt>`" : need === "decided" ? "decision not finalized yet — run `jam converge finalize`" : "digest not rendered yet";
     throw new Error(`cannot approve gate ${gateId}: ${what} (status=${g.status}, needs ${need})`);
   }
   g.status = "approved";
