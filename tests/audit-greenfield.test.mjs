@@ -19,6 +19,7 @@ function gfLedger() {
     { type: "codex-bound", sprintId: "b1" },
     { type: "evidence", sprintId: "b1", gateId: "sprint-b1", exitCode: 0 },
     { type: "sprint-done", sprintId: "b1" },
+    { type: "final-verification", command: "exit 1", exitCode: 0 },
     { type: "phase-advanced", from: "BUILD", to: "FINISH" },
   ];
 }

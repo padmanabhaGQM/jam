@@ -23,7 +23,7 @@ function driveToDoneSprint(root) {
   const sid = "audit-sess-1";
   const sessDir = path.join(codexHome, "sessions");
   fs.mkdirSync(sessDir, { recursive: true });
-  fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), "{}\n");
+  fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), `{"type":"session_meta","payload":{"id":"${sid}"}}\n`);
   const env = { JAM_CODEX_BIN: FAKE, JAM_FAKE_SESSION_ID: sid, CODEX_HOME: codexHome };
   jam(root, ["diagnose", "fix", "--goal", writeJSON(path.join(root, "g.txt"), { x: 1 }), "--run-id", "r1"]);
   jam(root, ["render-digest", "DIAGNOSE", "--file", writeJSON(path.join(root, "d.json"), digestObj())]);

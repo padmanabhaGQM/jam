@@ -3,7 +3,7 @@ import path from "node:path";
 import { readState, writeState, addGate } from "./state.mjs";
 import { recordEvidence } from "./actions.mjs";
 import { appendLedger } from "./ledger.mjs";
-import { locateTranscript } from "./codex/session.mjs";
+import { locateTranscript, transcriptMatchesSession } from "./codex/session.mjs";
 
 function nowIso(now) { return now ?? new Date().toISOString(); }
 function sprintGateId(id) { return `sprint-${id}`; }
@@ -58,8 +58,11 @@ export function bindCodexSession({ runDir: dir, sprintId, sessionId, transcriptP
   if (transcriptPath && located && path.resolve(transcriptPath) !== path.resolve(located)) {
     throw new Error(`transcriptPath does not match the located Codex rollout for session ${sessionId}`);
   }
+  // Content-bind: accept the located rollout only if its session_meta identifies THIS exact session.
+  // (Filename substring matching alone is forgeable; this is bounded by who can write CODEX_HOME/sessions.)
+  const verified = located && transcriptMatchesSession(located, sessionId) ? located : null;
   sprint.codexSessions = sprint.codexSessions ?? [];
-  sprint.codexSessions.push({ sessionId, transcriptPath: located ?? null, at: nowIso(now) });
+  sprint.codexSessions.push({ sessionId, transcriptPath: verified, at: nowIso(now) });
   writeState(dir, state);
   appendLedger(dir, { at: nowIso(now), type: "codex-bound", sprintId, sessionId });
   return state;

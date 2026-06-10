@@ -6,6 +6,7 @@ import path from "node:path";
 import { createRun } from "../plugins/jam/scripts/lib/actions.mjs";
 import { readState, writeState, validateState } from "../plugins/jam/scripts/lib/state.mjs";
 import { bindCodexSession, finishSprint } from "../plugins/jam/scripts/lib/sprint.mjs";
+import { transcriptMatchesSession } from "../plugins/jam/scripts/lib/codex/session.mjs";
 import { fakeCodexHome } from "./helpers/codex.mjs";
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), "jam-bind-")); }
@@ -102,4 +103,19 @@ test("bindCodexSession rejects a caller transcriptPath that differs from the loc
     () => bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "sess-1", transcriptPath: mismatched, codexHome }),
     /does not match the located Codex rollout/
   );
+});
+
+test("transcriptMatchesSession: true iff the rollout's session_meta id equals sessionId", () => {
+  const { transcriptPath } = fakeCodexHome("sX");                       // default body has session_meta id sX
+  assert.equal(transcriptMatchesSession(transcriptPath, "sX"), true);
+  assert.equal(transcriptMatchesSession(transcriptPath, "sY"), false);
+  assert.equal(transcriptMatchesSession("/no/such/file.jsonl", "sX"), false);
+});
+
+test("bindCodexSession stores null when the located rollout's session_meta id != sessionId", () => {
+  const dir = runWithSprint();
+  // filename matches "sess-1" (so locateTranscript finds it) but session_meta names someone else
+  const { codexHome } = fakeCodexHome("sess-1", '{"type":"session_meta","payload":{"id":"someone-else"}}\n');
+  bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "sess-1", codexHome, now: "t1" });
+  assert.equal(readState(dir).plan.sprints[0].codexSessions[0].transcriptPath, null);
 });

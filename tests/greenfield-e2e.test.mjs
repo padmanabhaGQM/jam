@@ -43,7 +43,7 @@ test("FULL greenfield run: intent -> GROUND -> CONVERGE -> SPECIFY -> BUILD -> F
   const codexHome = path.join(root, "codex-home");
   const sid = "fake-build-1";
   fs.mkdirSync(path.join(codexHome, "sessions"), { recursive: true });
-  fs.writeFileSync(path.join(codexHome, "sessions", `rollout-2026-06-10T00-00-00-${sid}.jsonl`), "{}\n");
+  fs.writeFileSync(path.join(codexHome, "sessions", `rollout-2026-06-10T00-00-00-${sid}.jsonl`), `{"type":"session_meta","payload":{"id":"${sid}"}}\n`);
   const pf = path.join(root, "p.md"); fs.writeFileSync(pf, "build it");   // a real prompt file (not JSON)
   jam(root, ["codex-run", "--sprint", "b1", "--prompt-file", pf, "--out-dir", path.join(root, "out"), "--timeout", "5000"], { JAM_FAKE_SESSION_ID: sid, CODEX_HOME: codexHome });
   fs.writeFileSync(path.join(root, "built.flag"), "ok");   // the "build" makes the SSOT verifyCmd green

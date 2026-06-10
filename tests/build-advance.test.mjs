@@ -13,6 +13,7 @@ import { fakeCodexHome } from "./helpers/codex.mjs";
 // verifyCmd checks a flag file relative to cwd; RED until the file exists.
 test("BUILD -> FINISH: not-all-sprints-done is refused; a green SSOT + done sprint + audit reaches FINISH", () => {
   const dir = atBuild(["WER<5%"], "test -f built.flag");
+  const projectRoot = path.resolve(dir, "..", "..", "..", "..");
   recordBuildPlan({ runDir: dir, sprints: [{ id: "b1", title: "make it pass", needs: [] }], now: "t21" });
   recordApproval({ runDir: dir, gateId: "BUILD-plan", who: "u", now: "t22" });
 
@@ -23,8 +24,8 @@ test("BUILD -> FINISH: not-all-sprints-done is refused; a green SSOT + done spri
   startSprint({ runDir: dir, sprintId: "b1" });
   const { codexHome } = fakeCodexHome("sess-b1");
   bindCodexSession({ runDir: dir, sprintId: "b1", sessionId: "sess-b1", codexHome, now: "t24" });
-  fs.writeFileSync(path.join(dir, "built.flag"), "ok");          // the "build" makes verifyCmd green
-  const { result } = verifySprint({ runDir: dir, sprintId: "b1", cwd: dir });
+  fs.writeFileSync(path.join(projectRoot, "built.flag"), "ok");  // the "build" makes verifyCmd green
+  const { result } = verifySprint({ runDir: dir, sprintId: "b1", cwd: projectRoot });
   assert.equal(result.exitCode, 0);
   finishSprint({ runDir: dir, sprintId: "b1", codexHome });
 

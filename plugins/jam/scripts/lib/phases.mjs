@@ -1,18 +1,26 @@
+import path from "node:path";
 import { readState, writeState, addGate } from "./state.mjs";
 import { evaluateGate } from "./gate.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { allSprintsDone } from "./sprint.mjs";
 import { auditRun } from "./audit.mjs";
+import { runVerification } from "./evidence.mjs";
 import { phaseOrderFor, GREENFIELD_STUB_PHASES, GREENFIELD_STUB_SLICE, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
 
 export { repairPhaseOrder } from "./mode.mjs";
 
-export function advancePhase(state) {
+export function advancePhase(state, { verified = false } = {}) {
   const order = phaseOrderFor(state.mode);
   const i = order.indexOf(state.phase);
   if (i === -1) throw new Error(`advancePhase: ${state.phase} is not a phase in mode ${state.mode ?? "repair"}`);
   const next = order[i + 1];
   if (!next) throw new Error(state.mode === "greenfield" ? `already at the final phase (${state.phase})` : `already at the final repair phase (${state.phase})`);
+  // The FINISH transition requires the live verifyCmd re-verification that only advanceRun performs
+  // (it has the run dir / project root). Refuse it here so the exported advancePhase cannot be used as a
+  // public-lib bypass that persists FINISH without re-verifying the current workspace.
+  if (next === "FINISH" && !verified) {
+    throw new Error("advancePhase: the FINISH transition requires live verifyCmd re-verification — call advanceRun, not advancePhase");
+  }
   if (state.phase === "IMPLEMENT" || (state.mode === "greenfield" && state.phase === "BUILD")) {
     if (!allSprintsDone(state)) throw new Error(`cannot advance from ${state.phase}: not all sprints done`);
   }
@@ -62,10 +70,24 @@ export function advanceRun({ runDir: dir, now }) {
   const state = readState(dir);
   const from = state.phase;
   if (state.phase === "IMPLEMENT" || (state.mode === "greenfield" && state.phase === "BUILD")) {
+    // 1. Eligibility: a mid-implementation run must not run the final acceptance command at all.
+    //    (Mirrors advancePhase's guard, with the existing message, so it fires BEFORE the live verify.)
+    if (!allSprintsDone(state)) throw new Error(`cannot advance from ${state.phase}: not all sprints done`);
+    // 2. Historical ledger honesty (unchanged).
     const audit = auditRun({ runDir: dir });
     if (!audit.ok) throw new Error(`cannot advance to FINISH: audit failed: ${audit.failures.join("; ")}`);
+    // 3. Live re-verify: the locked verifyCmd must pass against the CURRENT workspace, not just historically.
+    const projectRoot = path.resolve(dir, "..", "..", "..", "..");   // runDir = <root>/docs/superpowers/loop-runs/<id>
+    const cmd = state.plan?.verifyCmd;
+    if (!cmd) throw new Error("cannot advance to FINISH: no verifyCmd in plan");
+    const result = runVerification(cmd, projectRoot);
+    if (result.exitCode !== 0) throw new Error(`cannot advance to FINISH: verifyCmd is currently red (exit ${result.exitCode}): ${cmd}`);
+    // 4. Only now, after honesty AND liveness pass, record the final-verification.
+    appendLedger(dir, { at: now ?? new Date().toISOString(), type: "final-verification", command: cmd, exitCode: 0 });
   }
-  advancePhase(state);
+  // verified:true — advanceRun only reaches a FINISH transition after the live re-verify above (FINISH's
+  // only predecessors are IMPLEMENT/BUILD, which always go through that block).
+  advancePhase(state, { verified: true });
   writeState(dir, state);
   appendLedger(dir, { at: now ?? new Date().toISOString(), type: "phase-advanced", from, to: state.phase });
   return state;

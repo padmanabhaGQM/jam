@@ -31,7 +31,7 @@ test("codex-run --sprint binds a session with a locatable transcript; --done suc
   const sid = "jam-fake-sess-1";
   const sessDir = path.join(codexHome, "sessions");
   fs.mkdirSync(sessDir, { recursive: true });
-  fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), "{}\n");
+  fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), `{"type":"session_meta","payload":{"id":"${sid}"}}\n`);
   const env = { JAM_CODEX_BIN: FAKE, JAM_FAKE_SESSION_ID: sid, CODEX_HOME: codexHome };
   toImplement(root);
   jam(root, ["sprint", "fix-1", "--start"]);
@@ -59,7 +59,7 @@ test("codex-resume --sprint binds using the positional session id even when the 
   const sid = "resume-sess-1";
   const sessDir = path.join(codexHome, "sessions");
   fs.mkdirSync(sessDir, { recursive: true });
-  fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), "{}\n");
+  fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), `{"type":"session_meta","payload":{"id":"${sid}"}}\n`);
   const env = { JAM_CODEX_BIN: FAKE, CODEX_HOME: codexHome, JAM_FAKE_NO_THREAD_STARTED: "1" };
   toImplement(root);
   jam(root, ["sprint", "fix-1", "--start"]);

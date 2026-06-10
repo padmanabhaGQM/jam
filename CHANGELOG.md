@@ -5,6 +5,10 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.16.0 — Foundation hardening (FINISH liveness + content-bound authorship)
+- Advancing to FINISH (repair IMPLEMENT→FINISH and greenfield BUILD→FINISH) now **re-runs the locked `verifyCmd` against the current workspace** and refuses if it is red — a run can no longer FINISH on stale per-sprint evidence. A `final-verification` ledger entry is recorded, and `jam audit` requires it after the last sprint.
+- Codex authorship binding is **content-bound**: `bindCodexSession` accepts the located rollout only if its `session_meta.payload.id` equals the bound session id (filename substring matching alone was forgeable). Honest boundary: this authenticates file↔session identity, not diff authorship, and is bounded by who can write `CODEX_HOME/sessions`.
+
 ## 0.15.0 — BUILD phase (ganjam G4) — greenfield loop complete
 - Greenfield's final phase: wire the certified verifyCmd SSOT into a locked build plan and run the existing gated sprint loop to FINISH.
 - `state.plan.verifyCmd` is LOCKED to the certified SSOT (`recordBuildPlan` rejects any other) — you build to exactly the bar you certified.
