@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { phaseOrderFor } from "./mode.mjs";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
 const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded", "shortlisted", "contested", "decided", "covered", "specified"];
@@ -53,6 +54,9 @@ export function validateState(state) {
   }
   if ("mode" in state && !["repair", "greenfield"].includes(state.mode)) {
     errors.push(`invalid mode: ${state.mode}`);
+  }
+  if (typeof state.phase === "string" && state.mode && !phaseOrderFor(state.mode).includes(state.phase)) {
+    errors.push(`phase ${state.phase} is not a valid phase for mode ${state.mode}`);
   }
   for (const [id, g] of Object.entries(state.gates ?? {})) {
     if (!VALID_MODES.includes(g.mode)) errors.push(`gate ${id}: invalid mode ${g.mode}`);

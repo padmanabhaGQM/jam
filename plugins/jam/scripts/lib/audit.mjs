@@ -20,6 +20,10 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
   const ORDER = greenfield ? greenfieldPhaseOrder : repairPhaseOrder;
   const PRODUCING = greenfield ? PRODUCING_GREENFIELD : PRODUCING_REPAIR;
 
+  if (typeof state.phase === "string" && !ORDER.includes(state.phase)) {
+    failures.push(`ordering: phase ${state.phase} is not a valid phase for this mode`);
+  }
+
   let expectedFrom = ORDER[0];
   ledger.forEach((e, i) => {
     if (e.type !== "phase-advanced") return;
@@ -89,6 +93,13 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     let lastBuildApprIdx = -1;
     ledger.forEach((x, xi) => { if (x.type === "approval" && x.gateId === "BUILD-plan") lastBuildApprIdx = xi; });
     if (lastBuildApprIdx !== -1) {
+      ledger.forEach((x, xi) => {
+        if (x.type === "sprint-started" && xi < lastBuildApprIdx) {
+          failures.push(`ordering: sprint ${x.sprintId} started before the BUILD-plan was approved`);
+        }
+      });
+    }
+    if (lastBuildApprIdx !== -1) {
       const mutatedAfter = ledger.findIndex((x, xi) => xi > lastBuildApprIdx && x.type === "plan-recorded");
       if (mutatedAfter !== -1) failures.push("ordering: build plan was re-recorded after its BUILD-plan approval without re-approval");
     }
@@ -118,8 +129,9 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     if (e.type !== "sprint-done") return;
     const S = e.sprintId;
     const boundIdx = ledger.findIndex((x, xi) => xi < d && x.type === "codex-bound" && x.sprintId === S);
-    if (boundIdx === -1) failures.push(`authorship: sprint-done ${S} has no preceding codex-bound`);
     const startedIdx = ledger.findIndex((x, xi) => xi < d && x.type === "sprint-started" && x.sprintId === S);
+    if (boundIdx === -1) failures.push(`authorship: sprint-done ${S} has no preceding codex-bound`);
+    else if (startedIdx !== -1 && boundIdx < startedIdx) failures.push(`ordering: sprint ${S} was bound before it was started`);
     if (startedIdx === -1) failures.push(`ordering: sprint-done ${S} has no preceding sprint-started`);
     const sprint = sprints.find((s) => s.id === S);
     const transcriptOk = (sprint?.codexSessions ?? []).some((s) => transcriptExists(s.transcriptPath));

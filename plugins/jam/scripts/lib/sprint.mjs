@@ -51,6 +51,7 @@ export function bindCodexSession({ runDir: dir, sprintId, sessionId, transcriptP
   const state = readState(dir);
   const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
   if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
+  if (sprint.status !== "in-progress") throw new Error(`sprint ${sprintId} is not in-progress (start it before binding a Codex session)`);
   sprint.codexSessions = sprint.codexSessions ?? [];
   sprint.codexSessions.push({ sessionId, transcriptPath: transcriptPath ?? null, at: nowIso(now) });
   writeState(dir, state);

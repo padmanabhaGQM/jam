@@ -16,6 +16,13 @@ function runWithSprint() {
   writeState(dir, s);
   return dir;
 }
+function runWithPendingSprint() {
+  const dir = runWithSprint();
+  const s = readState(dir);
+  s.plan.sprints[0].status = "pending";
+  writeState(dir, s);
+  return dir;
+}
 
 test("bindCodexSession appends a session entry to the sprint", () => {
   const dir = runWithSprint();
@@ -37,6 +44,14 @@ test("bindCodexSession tolerates a null transcriptPath and appends (not replaces
 test("bindCodexSession throws on an unknown sprint", () => {
   const dir = runWithSprint();
   assert.throws(() => bindCodexSession({ runDir: dir, sprintId: "nope", sessionId: "x" }), /unknown sprint/);
+});
+
+test("bindCodexSession throws unless the sprint is in-progress", () => {
+  const dir = runWithPendingSprint();
+  assert.throws(
+    () => bindCodexSession({ runDir: dir, sprintId: "fix-1", sessionId: "x" }),
+    /sprint fix-1 is not in-progress \(start it before binding a Codex session\)/
+  );
 });
 
 test("validateState rejects malformed codexSessions, accepts well-formed and absent", () => {

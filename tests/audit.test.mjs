@@ -68,6 +68,15 @@ test("sprint-done with no preceding codex-bound fails authorship", () => {
   assert.match(fails(l), /authorship.*codex-bound/);
 });
 
+test("codex-bound before sprint-started fails ordering", () => {
+  const l = goodLedger();
+  const boundIdx = l.findIndex((e) => e.type === "codex-bound" && e.sprintId === "fix-1");
+  const startIdx = l.findIndex((e) => e.type === "sprint-started" && e.sprintId === "fix-1");
+  const [bound] = l.splice(boundIdx, 1);
+  l.splice(startIdx, 0, bound);
+  assert.match(fails(l), /was bound before it was started/);
+});
+
 test("sprint-done whose bound transcript does not exist fails authorship", () => {
   assert.match(fails(goodLedger(), goodState(), () => false), /no bound session with an existing transcript/);
 });

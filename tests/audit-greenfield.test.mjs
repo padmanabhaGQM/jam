@@ -147,6 +147,14 @@ test("KEY RED-TEAM: a build plan re-recorded after BUILD-plan approval fails the
   assert.ok(r.failures.some((f) => /re-recorded after its BUILD-plan approval/.test(f)));
 });
 
+test("KEY RED-TEAM: a BUILD sprint started before BUILD-plan approval fails the audit", () => {
+  const led = gfLedger().filter((e) => e.type !== "sprint-started");
+  const apprIdx = led.findIndex((e) => e.type === "approval" && e.gateId === "BUILD-plan");
+  led.splice(apprIdx, 0, { type: "sprint-started", sprintId: "b1" });
+  const r = evaluateAudit({ ledger: led, state: gfState(), transcriptExists: yes });
+  assert.ok(r.failures.some((f) => /started before the BUILD-plan was approved/.test(f)));
+});
+
 test("KEY RED-TEAM: a planned state sprint outside the approved build plan fails the audit", () => {
   const led = gfLedger().filter((e) => !(e.type === "phase-advanced" && e.from === "BUILD" && e.to === "FINISH"));
   const st = { ...gfState(), phase: "BUILD" };
@@ -164,4 +172,19 @@ test("KEY RED-TEAM: state.spec.verifyCmd must match the certified verifyCmd in t
   const st = { ...gfState(), spec: { certified: true, verifyCmd: "exit 2" } };
   const r = evaluateAudit({ ledger: gfLedger(), state: st, transcriptExists: yes });
   assert.ok(r.failures.some((f) => /does not match the certified verifyCmd/.test(f)));
+});
+
+test("KEY RED-TEAM: a phase outside the greenfield order fails validation and audit", () => {
+  const st = {
+    runId: "r1",
+    mode: "greenfield",
+    phase: "NOT_A_PHASE",
+    gates: {},
+    dial: {},
+    createdAt: "t",
+  };
+  assert.ok(validateState(st).some((e) => /phase NOT_A_PHASE is not a valid phase for mode greenfield/.test(e)));
+  const r = evaluateAudit({ ledger: [], state: st, transcriptExists: yes });
+  assert.equal(r.ok, false);
+  assert.ok(r.failures.some((f) => /phase NOT_A_PHASE is not a valid phase for this mode/.test(f)));
 });
