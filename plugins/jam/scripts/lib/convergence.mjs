@@ -44,3 +44,32 @@ export function setShortlist({ runDir: dir, options, now }) {
   if (reopened) appendLedger(dir, { at: nowIso(now), type: "convergence-reopened", reason: "shortlist changed" });
   return state;
 }
+
+export function recordDecision({ runDir: dir, agent, chosen, rationale, spikes, now }) {
+  if (!["claude", "codex"].includes(agent)) throw new Error(`recordDecision: agent must be "claude" or "codex"`);
+  if (!chosen) throw new Error("recordDecision: a chosen option is required");
+  const state = readState(dir);
+  requireConverge(state);
+  if (state.gates["CONVERGE-shortlist"].status !== "approved") throw new Error("recordDecision: the CONVERGE-shortlist gate must be approved first");
+  if (!state.convergence.shortlist.includes(chosen)) throw new Error(`recordDecision: chosen "${chosen}" is not in the approved shortlist`);
+  const c = state.convergence;
+  c.decisions[agent] = { chosen, rationale: rationale ?? null, spikes: Array.isArray(spikes) ? spikes : [] };
+  if (c.decisions.claude && c.decisions.codex) {
+    c.agree = c.decisions.claude.chosen === c.decisions.codex.chosen;
+    if (c.agree) {
+      c.chosen = c.decisions.claude.chosen;
+      delete state.gates["CONVERGE-tiebreak"];   // a fresh agreement dissolves a stale tiebreak
+      c.tiebreak = null;
+    } else {
+      c.chosen = null;
+      c.tiebreak = null;
+      if (!state.gates["CONVERGE-tiebreak"]) addGate(state, "CONVERGE-tiebreak", "human", "contested");
+      state.gates["CONVERGE-tiebreak"].status = "contested";
+    }
+  }
+  const reopened = reopenDecision(state);
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "decision-recorded", agent, chosen });
+  if (reopened) appendLedger(dir, { at: nowIso(now), type: "convergence-reopened", reason: `decision recorded by ${agent}` });
+  return state;
+}
