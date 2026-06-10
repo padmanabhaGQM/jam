@@ -51,3 +51,17 @@ export function setCoverage({ runDir: dir, verifyCmd, checks, now }) {
   if (reopened) appendLedger(dir, { at: nowIso(now), type: "spec-reopened", reason: "suite changed" });
   return state;
 }
+
+export function recordRedProof({ runDir: dir, cwd, now }) {
+  const state = readState(dir);
+  requireSpecify(state);
+  if (state.gates["SPECIFY-coverage"].status !== "approved") throw new Error("recordRedProof: the SPECIFY-coverage gate must be approved first");
+  if (!state.spec.verifyCmd) throw new Error("recordRedProof: no verifyCmd set");
+  const result = runVerification(state.spec.verifyCmd, cwd ?? dir);
+  state.spec.redProof = { exitCode: result.exitCode, at: nowIso(now) };
+  const reopened = reopenSpec(state);   // a new proof after certification invalidates it
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "redproof-recorded", exitCode: result.exitCode });
+  if (reopened) appendLedger(dir, { at: nowIso(now), type: "spec-reopened", reason: "red-proof re-recorded after certification" });
+  return state;
+}
