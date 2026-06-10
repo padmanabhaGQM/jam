@@ -19,6 +19,7 @@ import { setGoal } from "./lib/goal.mjs";
 import { sharpenIntent, addClaim, refuteClaim, convergeGrounding } from "./lib/grounding.mjs";
 import { setShortlist, recordDecision, ruleTiebreak, convergeDecision } from "./lib/convergence.mjs";
 import { setCoverage, recordRedProof, recordGameability, certifyVerifyCmd } from "./lib/spec.mjs";
+import { recordBuildPlan } from "./lib/build.mjs";
 import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession } from "./lib/sprint.mjs";
@@ -320,6 +321,23 @@ function cmdSpecify(cwd, positional, flags) {
   } catch (e) { return fail(e.message); }
 }
 
+function cmdBuild(cwd, positional, flags) {
+  const sub = positional[0];
+  const { dir } = requireActiveRun(cwd);
+  try {
+    switch (sub) {
+      case "plan": {
+        if (!flags.file) return fail("usage: jam build plan --file <json with {sprints:[...]}>");
+        const o = JSON.parse(fs.readFileSync(flags.file, "utf8"));
+        recordBuildPlan({ runDir: dir, sprints: o.sprints, verifyCmd: o.verifyCmd });
+        return process.stdout.write(`build plan recorded (verifyCmd locked to the certified SSOT); approve with: jam approve BUILD-plan\n`);
+      }
+      default:
+        return fail("usage: jam build plan --file <json>");
+    }
+  } catch (e) { return fail(e.message); }
+}
+
 function cmdCancel(cwd, positional, flags) {
   const { runId, dir } = requireActiveRun(cwd);
   if (flags.confirm !== runId) return fail(`cancel is irreversible — re-run with --confirm ${runId}`);
@@ -500,6 +518,8 @@ async function main() {
       return cmdConverge(cwd, positional, flags);
     case "specify":
       return cmdSpecify(cwd, positional, flags);
+    case "build":
+      return cmdBuild(cwd, positional, flags);
     case "status":
       return cmdStatus(cwd);
     case "render-digest":
