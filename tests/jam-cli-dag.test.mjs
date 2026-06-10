@@ -64,7 +64,7 @@ test("a two-sprint DAG (B needs A) is driven A-then-B to FINISH; B can't start b
   const sessDir = path.join(codexHome, "sessions");
   fs.mkdirSync(sessDir, { recursive: true });
   for (const [sid, sprint] of [["sess-a", "a"], ["sess-b", "b"]]) {
-    fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), "{}\n");
+    fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), `{"type":"session_meta","payload":{"id":"${sid}"}}\n`);
     const env = { JAM_CODEX_BIN: FAKE, JAM_FAKE_SESSION_ID: sid, CODEX_HOME: codexHome };
     assert.equal(jam(root, ["sprint", sprint, "--start"]).status, 0, `start ${sprint}`);
     const pf = path.join(root, `${sprint}.md`); fs.writeFileSync(pf, "impl");

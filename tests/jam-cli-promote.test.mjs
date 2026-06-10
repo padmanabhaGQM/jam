@@ -51,7 +51,7 @@ test("a promoted sprint can be driven to done and the run reaches FINISH", () =>
   const sessDir = path.join(codexHome, "sessions");
   fs.mkdirSync(sessDir, { recursive: true });
   for (const [sid, sprint] of [["sess-fix-1", "fix-1"], ["sess-fix-9", "fix-9"]]) {
-    fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), "{}\n");
+    fs.writeFileSync(path.join(sessDir, `rollout-2026-06-09T00-00-00-${sid}.jsonl`), `{"type":"session_meta","payload":{"id":"${sid}"}}\n`);
     const env = { JAM_CODEX_BIN: FAKE, JAM_FAKE_SESSION_ID: sid, CODEX_HOME: codexHome };
     assert.equal(jam(root, ["sprint", sprint, "--start"]).status, 0);
     const pf = path.join(root, `${sprint}.md`); fs.writeFileSync(pf, "impl");

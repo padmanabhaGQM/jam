@@ -37,3 +37,15 @@ export function locateTranscript(sessionId, { codexHome } = {}) {
   }
   return null;
 }
+
+export function transcriptMatchesSession(transcriptPath, sessionId) {
+  if (!transcriptPath) return false;
+  let raw;
+  try { raw = fs.readFileSync(transcriptPath, "utf8"); } catch { return false; }
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    let e; try { e = JSON.parse(line); } catch { continue; }
+    if (e && e.type === "session_meta" && e.payload && e.payload.id === sessionId) return true;
+  }
+  return false;
+}

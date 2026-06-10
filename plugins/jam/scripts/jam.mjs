@@ -405,8 +405,10 @@ function maybeBindSprint({ cwd, flags, status, sessionId }) {
   }
   const { dir } = requireActiveRun(cwd);
   const transcriptPath = locateTranscript(sessionId) ?? null;
-  bindCodexSession({ runDir: dir, sprintId: flags.sprint, sessionId, transcriptPath });
-  process.stdout.write(`bound session ${sessionId} to sprint ${flags.sprint} (transcript: ${transcriptPath ?? "none"})\n`);
+  const st = bindCodexSession({ runDir: dir, sprintId: flags.sprint, sessionId, transcriptPath });
+  const sess = (st.plan?.sprints?.find((s) => s.id === flags.sprint)?.codexSessions ?? []).slice(-1)[0];
+  const stored = sess ? sess.transcriptPath : null;
+  process.stdout.write(`bound session ${sessionId} to sprint ${flags.sprint} (transcript: ${stored ?? "none — rollout did not content-match the session"})\n`);
 }
 
 async function cmdCodexRun(cwd, positional, flags) {
