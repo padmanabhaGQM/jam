@@ -8,6 +8,7 @@ import { advanceRun } from "../plugins/jam/scripts/lib/phases.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession } from "../plugins/jam/scripts/lib/sprint.mjs";
 import { recordBuildPlan } from "../plugins/jam/scripts/lib/build.mjs";
 import { atBuild } from "./helpers/converge.mjs";
+import { fakeCodexHome } from "./helpers/codex.mjs";
 
 // verifyCmd checks a flag file relative to cwd; RED until the file exists.
 test("BUILD -> FINISH: not-all-sprints-done is refused; a green SSOT + done sprint + audit reaches FINISH", () => {
@@ -20,12 +21,12 @@ test("BUILD -> FINISH: not-all-sprints-done is refused; a green SSOT + done spri
 
   // run the sprint: start, bind a (fake) codex session + transcript, make verifyCmd green, verify, done
   startSprint({ runDir: dir, sprintId: "b1" });
-  const tr = path.join(dir, "b1-transcript.jsonl"); fs.writeFileSync(tr, "{}\n");
-  bindCodexSession({ runDir: dir, sprintId: "b1", sessionId: "sess-b1", transcriptPath: tr, now: "t24" });
+  const { codexHome } = fakeCodexHome("sess-b1");
+  bindCodexSession({ runDir: dir, sprintId: "b1", sessionId: "sess-b1", codexHome, now: "t24" });
   fs.writeFileSync(path.join(dir, "built.flag"), "ok");          // the "build" makes verifyCmd green
   const { result } = verifySprint({ runDir: dir, sprintId: "b1", cwd: dir });
   assert.equal(result.exitCode, 0);
-  finishSprint({ runDir: dir, sprintId: "b1" });
+  finishSprint({ runDir: dir, sprintId: "b1", codexHome });
 
   advanceRun({ runDir: dir, now: "t25" });                        // BUILD -> FINISH (audit passes)
   assert.equal(readState(dir).phase, "FINISH");

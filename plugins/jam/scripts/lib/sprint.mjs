@@ -1,7 +1,9 @@
 import fs from "node:fs";
+import path from "node:path";
 import { readState, writeState, addGate } from "./state.mjs";
 import { recordEvidence } from "./actions.mjs";
 import { appendLedger } from "./ledger.mjs";
+import { locateTranscript } from "./codex/session.mjs";
 
 function nowIso(now) { return now ?? new Date().toISOString(); }
 function sprintGateId(id) { return `sprint-${id}`; }
@@ -47,19 +49,23 @@ export function verifySprint({ runDir: dir, sprintId, cwd, now }) {
   return recordEvidence({ runDir: dir, gateId: sprintGateId(sprintId), sprintId, command: verifyCmd, cwd, now });
 }
 
-export function bindCodexSession({ runDir: dir, sprintId, sessionId, transcriptPath, now }) {
+export function bindCodexSession({ runDir: dir, sprintId, sessionId, transcriptPath, codexHome, now }) {
   const state = readState(dir);
   const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
   if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
   if (sprint.status !== "in-progress") throw new Error(`sprint ${sprintId} is not in-progress (start it before binding a Codex session)`);
+  const located = locateTranscript(sessionId, codexHome ? { codexHome } : undefined);
+  if (transcriptPath && located && path.resolve(transcriptPath) !== path.resolve(located)) {
+    throw new Error(`transcriptPath does not match the located Codex rollout for session ${sessionId}`);
+  }
   sprint.codexSessions = sprint.codexSessions ?? [];
-  sprint.codexSessions.push({ sessionId, transcriptPath: transcriptPath ?? null, at: nowIso(now) });
+  sprint.codexSessions.push({ sessionId, transcriptPath: located ?? null, at: nowIso(now) });
   writeState(dir, state);
   appendLedger(dir, { at: nowIso(now), type: "codex-bound", sprintId, sessionId });
   return state;
 }
 
-export function finishSprint({ runDir: dir, sprintId, now }) {
+export function finishSprint({ runDir: dir, sprintId, codexHome, now }) {
   const state = readState(dir);
   const gate = state.gates[sprintGateId(sprintId)];
   if (!gate || gate.status !== "evidence-passed") {
@@ -67,6 +73,10 @@ export function finishSprint({ runDir: dir, sprintId, now }) {
   }
   const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
   if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
+  // The stored transcriptPath is canonical-by-construction: bindCodexSession derives it from
+  // locateTranscript(sessionId) and never trusts a caller-supplied path (a made-up session stores
+  // null). Confirming the artifact still exists is therefore sufficient; re-locating here would
+  // wrongly couple `--done` to CODEX_HOME pointing at the same place at finish time.
   const authored = (sprint.codexSessions ?? []).some((s) => !!s.transcriptPath && fs.existsSync(s.transcriptPath));
   if (!authored) {
     throw new Error(`sprint ${sprintId} has no Codex-authored session (a bound session with a locatable transcript) — implementation must come from Codex`);
