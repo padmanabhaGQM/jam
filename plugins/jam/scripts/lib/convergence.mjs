@@ -105,28 +105,24 @@ export function convergeDecision({ runDir: dir, ledger, spikes, acceptedUnknowns
   if (Array.isArray(ledger)) c.ledger = ledger;
   if (Array.isArray(spikes)) c.spikes = spikes;
   if (Array.isArray(acceptedUnknowns)) c.acceptedUnknowns = acceptedUnknowns;
-  // every spike transcript must exist
-  const spikeRefs = new Set();
+  const dims = (state.grounding && Array.isArray(state.grounding.dimensions)) ? state.grounding.dimensions : [];
+  if (dims.length === 0) throw new Error("convergeDecision: a grounded decision needs at least one acceptance dimension");
+  const spikeByRef = new Map();
   for (const s of (c.spikes ?? [])) {
     if (!s.evidenceRef || !fs.existsSync(s.evidenceRef)) throw new Error(`convergeDecision: spike ${s.id} has no locatable transcript`);
-    spikeRefs.add(s.evidenceRef);
+    spikeByRef.set(s.evidenceRef, s);
   }
-  // every G1 dimension must appear; satisfied => registered+real spike; unmet => accepted
-  const dims = (state.grounding && Array.isArray(state.grounding.dimensions)) ? state.grounding.dimensions : [];
   const covered = new Set(c.ledger.map((r) => r.dimension));
   for (const d of dims) {
-    if (!covered.has(d)) throw new Error(`convergeDecision: dimension ${d} is missing from the decision-ledger`);
+    if (!covered.has(d)) throw new Error(`convergeDecision: dimension "${d}" is missing from the decision-ledger`);
   }
   for (const r of c.ledger) {
     if (r.status === "satisfied") {
-      if (!r.evidenceRef || !spikeRefs.has(r.evidenceRef)) {
-        throw new Error(`convergeDecision: dimension "${r.dimension}" is 'satisfied' but its evidenceRef is not a registered spike`);
-      }
-      if (!fs.existsSync(r.evidenceRef)) {
-        throw new Error(`convergeDecision: dimension "${r.dimension}" spike transcript is not locatable (${r.evidenceRef})`);
-      }
-    } else if (r.status === "unmet") {
-      if (r.accepted !== true) throw new Error(`convergeDecision: dimension "${r.dimension}" is unmet and not accepted — accept the risk or change the decision`);
+      const sp = r.evidenceRef ? spikeByRef.get(r.evidenceRef) : null;
+      if (!sp) throw new Error(`convergeDecision: dimension "${r.dimension}" is 'satisfied' but its evidenceRef is not a registered spike`);
+      if (sp.dimension !== r.dimension) throw new Error(`convergeDecision: dimension "${r.dimension}" is 'satisfied' by a spike registered for a different dimension (${sp.dimension ?? "none"})`);
+    } else if (r.status === "at-risk" || r.status === "unmet") {
+      if (r.accepted !== true) throw new Error(`convergeDecision: dimension "${r.dimension}" is '${r.status}' and not accepted — accept the risk (accepted:true) or change the decision`);
     }
   }
   // every carried-forward G1 open-unknown must be explicitly accepted

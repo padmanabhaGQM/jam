@@ -32,7 +32,7 @@ test("CLI drives CONVERGE agree-path end-to-end to the SPECIFY-stub boundary", (
   jam(root, ["converge", "decide", "--agent", "codex", "--file", wj(root, "dx.json", { chosen: "opt-A", rationale: "y" })]);
   assert.match(jam(root, ["status"]).stdout, /convergence: .*agree/);
   const tr = path.join(root, "s1.jsonl"); fs.writeFileSync(tr, "{}\n");
-  assert.equal(jam(root, ["converge", "finalize", "--file", wj(root, "fin.json", { ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", evidenceRef: tr }] })]).status, 0);
+  assert.equal(jam(root, ["converge", "finalize", "--file", wj(root, "fin.json", { ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }] })]).status, 0);
   assert.match(jam(root, ["status"]).stdout, /CONVERGE: human\/decided|decided/);
   jam(root, ["approve", "CONVERGE"]);
   const adv = jam(root, ["advance"]);
@@ -47,7 +47,7 @@ test("CLI disagree-path requires a tiebreak before finalize", () => {
   jam(root, ["converge", "decide", "--agent", "claude", "--file", wj(root, "dc.json", { chosen: "opt-A" })]);
   jam(root, ["converge", "decide", "--agent", "codex", "--file", wj(root, "dx.json", { chosen: "opt-B" })]);
   const tr = path.join(root, "s1.jsonl"); fs.writeFileSync(tr, "{}\n");
-  const fin = wj(root, "fin.json", { ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", evidenceRef: tr }] });
+  const fin = wj(root, "fin.json", { ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }] });
   assert.notEqual(jam(root, ["converge", "finalize", "--file", fin]).status, 0);
   assert.equal(jam(root, ["converge", "tiebreak", "--choose", "opt-A"]).status, 0);
   assert.equal(jam(root, ["converge", "finalize", "--file", fin]).status, 0);

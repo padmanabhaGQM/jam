@@ -22,7 +22,7 @@
     } },
     "spikes": { "type": "array", "items": {
       "type": "object",
-      "required": ["id", "evidenceRef"],
+      "required": ["id", "evidenceRef", "dimension"],
       "properties": { "id": { "type": "string" }, "dimension": { "type": "string" }, "evidenceRef": { "type": "string" } }
     } },
     "acceptedUnknowns": { "type": "array", "items": { "type": "string" } },

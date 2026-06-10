@@ -24,7 +24,7 @@ test("convergeDecision flips CONVERGE to 'decided' on a clean ledger; then human
   const tr = spike(dir, "s1.jsonl");
   convergeDecision({ runDir: dir, ledger: [
     { dimension: "WER<5%", status: "satisfied", rationale: "probe hit 4.2%", evidenceRef: tr },
-    { dimension: "latency", status: "at-risk", rationale: "needs tuning" },
+    { dimension: "latency", status: "at-risk", rationale: "needs tuning", accepted: true },
   ], spikes: [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }], now: "t11" });
   const s = readState(dir);
   assert.equal(s.convergence.decided, true);
@@ -39,7 +39,7 @@ test("KEY RED-TEAM: a missing dimension blocks 'decided'", () => {
   const tr = spike(dir, "s1.jsonl");
   assert.throws(() => convergeDecision({ runDir: dir, ledger: [
     { dimension: "WER<5%", status: "satisfied", evidenceRef: tr },
-  ], spikes: [{ id: "s1", evidenceRef: tr }], now: "t11" }), /latency .* missing/);
+  ], spikes: [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }], now: "t11" }), /latency.*missing/);
   assert.notEqual(readState(dir).gates["CONVERGE"].status, "decided");
 });
 
@@ -58,14 +58,14 @@ test("KEY RED-TEAM: 'satisfied' must reference a registered, real spike transcri
   // unmet without accepted -> blocked
   assert.throws(() => convergeDecision({ runDir: dir, ledger: [
     { dimension: "WER<5%", status: "unmet" },
-  ], spikes: [], now: "t11" }), /unmet .* accepted/);
+  ], spikes: [], now: "t11" }), /unmet.*accepted/);
 });
 
 test("KEY RED-TEAM: a G1 open-unknown must be carried into acceptedUnknowns before 'decided'", () => {
   const dir = agreed(["WER<5%"], ["scale beyond 1h untested"]);
   const tr = spike(dir, "s1.jsonl");
   const ledger = [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }];
-  const spikes = [{ id: "s1", evidenceRef: tr }];
+  const spikes = [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }];
   assert.throws(() => convergeDecision({ runDir: dir, ledger, spikes, now: "t11" }), /open-unknown|acceptedUnknowns/);
   convergeDecision({ runDir: dir, ledger, spikes, acceptedUnknowns: ["scale beyond 1h untested"], now: "t12" });
   assert.equal(readState(dir).gates["CONVERGE"].status, "decided");
@@ -79,7 +79,7 @@ test("disagreement blocks 'decided' until the tiebreak is ruled", () => {
   recordDecision({ runDir: dir, agent: "codex", chosen: "opt-B", now: "t10" });
   const tr = spike(dir, "s1.jsonl");
   const ledger = [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }];
-  const spikes = [{ id: "s1", evidenceRef: tr }];
+  const spikes = [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }];
   assert.throws(() => convergeDecision({ runDir: dir, ledger, spikes, now: "t11" }), /disagree|tiebreak/);
   ruleTiebreak({ runDir: dir, chosen: "opt-A", now: "t11b" });
   convergeDecision({ runDir: dir, ledger, spikes, now: "t12" });
@@ -89,7 +89,7 @@ test("disagreement blocks 'decided' until the tiebreak is ruled", () => {
 test("KEY RED-TEAM: re-arm — recording a decision after 'decided' resets CONVERGE to pending and clears the ledger", () => {
   const dir = agreed(["WER<5%"]);
   const tr = spike(dir, "s1.jsonl");
-  convergeDecision({ runDir: dir, ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", evidenceRef: tr }], now: "t11" });
+  convergeDecision({ runDir: dir, ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }], now: "t11" });
   assert.equal(readState(dir).gates["CONVERGE"].status, "decided");
   recordDecision({ runDir: dir, agent: "codex", chosen: "opt-B", now: "t12" });
   const s = readState(dir);
@@ -101,12 +101,12 @@ test("KEY RED-TEAM: re-arm — recording a decision after 'decided' resets CONVE
 test("after decided+approval, advancing hits the SPECIFY stub", () => {
   const dir = agreed(["WER<5%"]);
   const tr = spike(dir, "s1.jsonl");
-  convergeDecision({ runDir: dir, ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", evidenceRef: tr }], now: "t11" });
+  convergeDecision({ runDir: dir, ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }], now: "t11" });
   recordApproval({ runDir: dir, gateId: "CONVERGE", who: "u", now: "t12" });
   assert.throws(() => advanceRun({ runDir: dir, now: "t13" }), /SPECIFY is not yet implemented \(ships in ganjam G3\)/);
 });
 
-test("validateState rejects a 'satisfied' row with no evidenceRef and an 'unmet' row without accepted", () => {
+test("validateState rejects a 'satisfied' row with no evidenceRef and unmet/at-risk rows without accepted", () => {
   const dir = agreed(["WER<5%"]);
   const s = readState(dir);
   s.convergence.ledger = [{ dimension: "WER<5%", status: "satisfied", evidenceRef: null }];
@@ -114,6 +114,8 @@ test("validateState rejects a 'satisfied' row with no evidenceRef and an 'unmet'
   s.convergence.ledger = [{ dimension: "WER<5%", status: "unmet" }];
   assert.ok(validateState(s).some((e) => /accepted/.test(e)));
   s.convergence.ledger = [{ dimension: "WER<5%", status: "at-risk", rationale: "ok" }];
+  assert.ok(validateState(s).some((e) => /accepted/.test(e)));
+  s.convergence.ledger = [{ dimension: "WER<5%", status: "at-risk", rationale: "ok", accepted: true }];
   assert.equal(validateState(s).filter((e) => /ledger|evidenceRef|accepted/.test(e)).length, 0);
 });
 

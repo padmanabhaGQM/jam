@@ -123,10 +123,14 @@ export function validateState(state) {
       if (r.status === "satisfied" && (typeof r.evidenceRef !== "string" || r.evidenceRef.length === 0)) {
         errors.push(`convergence ledger ${r.dimension}: a 'satisfied' dimension must carry an evidenceRef`);
       }
-      if (r.status === "unmet" && r.accepted !== true) {
-        errors.push(`convergence ledger ${r.dimension}: an 'unmet' dimension must be accepted`);
+      if ((r.status === "unmet" || r.status === "at-risk") && r.accepted !== true) {
+        errors.push(`convergence ledger ${r.dimension}: a '${r.status}' dimension must be accepted (accepted:true)`);
       }
     }
+  }
+  if (state.convergence && state.gates && state.gates["CONVERGE"] &&
+      ["decided", "approved"].includes(state.gates["CONVERGE"].status) && state.convergence.decided !== true) {
+    errors.push("CONVERGE gate is decided/approved but convergence.decided is not true");
   }
   return errors;
 }
