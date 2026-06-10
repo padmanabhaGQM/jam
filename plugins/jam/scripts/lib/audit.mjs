@@ -1,14 +1,26 @@
 import fs from "node:fs";
 import { readLedger } from "./ledger.mjs";
 import { readState } from "./state.mjs";
+import { repairPhaseOrder, greenfieldPhaseOrder } from "./mode.mjs";
+import { allSprintsDone } from "./sprint.mjs";   // run-honesty: a finished greenfield BUILD has all sprints done
 
-const ORDER = ["DIAGNOSE", "VERIFY", "PLAN", "IMPLEMENT", "FINISH"];
-const PRODUCING = { DIAGNOSE: "digest-rendered", VERIFY: "verification", PLAN: "plan-recorded" };
+const PRODUCING_REPAIR = { DIAGNOSE: "digest-rendered", VERIFY: "verification", PLAN: "plan-recorded" };
+// NOTE: no BUILD entry — the BUILD->FINISH advance is audited AFTER it's written (advanceRun audits before
+// advancePhase appends the ledger entry), so a BUILD producer check here would never fire (same as repair
+// IMPLEMENT, which has no producer). BUILD->FINISH is gated by allSprintsDone + the BUILD-plan gate +
+// the per-sprint authorship/evidence checks below. The GROUND/CONVERGE/SPECIFY producers ARE checked at
+// the FINISH-time audit because their phase-advanced entries are already in the ledger.
+const PRODUCING_GREENFIELD = { GROUND: "grounding-converged", CONVERGE: "convergence-decided", SPECIFY: "spec-certified" };
+// These producing artifacts carry no gateId — match them by type only (as plan-recorded already is for repair PLAN).
+const GATEID_AGNOSTIC = new Set(["plan-recorded", "grounding-converged", "convergence-decided", "spec-certified"]);
 
 export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
   const failures = [];
+  const greenfield = state.mode === "greenfield";
+  const ORDER = greenfield ? greenfieldPhaseOrder : repairPhaseOrder;
+  const PRODUCING = greenfield ? PRODUCING_GREENFIELD : PRODUCING_REPAIR;
 
-  let expectedFrom = "DIAGNOSE";
+  let expectedFrom = ORDER[0];
   ledger.forEach((e, i) => {
     if (e.type !== "phase-advanced") return;
     if (ORDER.indexOf(e.to) !== ORDER.indexOf(e.from) + 1) {
@@ -25,7 +37,7 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
       const producedIdx = ledger.findIndex((x, xi) =>
         xi < i &&
         x.type === producing &&
-        (producing === "plan-recorded" ? true : x.gateId === e.from) &&
+        (GATEID_AGNOSTIC.has(producing) ? true : x.gateId === e.from) &&
         (producing === "verification" ? x.blockers === 0 : true)
       );
       if (producedIdx === -1) failures.push(`ordering: advance from ${e.from} has no valid preceding ${producing}`);
@@ -35,6 +47,36 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
       }
     }
   });
+
+  // BUILD's producer/approval is MANDATORY for any greenfield run at or past BUILD — keyed on PHASE, not on
+  // gate presence, so a forged state that simply OMITS the BUILD-plan gate cannot slip past this check.
+  const phaseIdx = ORDER.indexOf(state.phase);
+  if (greenfield && phaseIdx >= ORDER.indexOf("BUILD")) {
+    const gateOk = state.gates && state.gates["BUILD-plan"] && state.gates["BUILD-plan"].status === "approved";
+    if (!gateOk) failures.push("ordering: greenfield BUILD requires an approved BUILD-plan gate");
+    const apprIdx = ledger.findIndex((x) => x.type === "approval" && x.gateId === "BUILD-plan");
+    const planIdx = ledger.findIndex((x) => x.type === "plan-recorded");
+    if (planIdx === -1) failures.push("ordering: greenfield BUILD requires plan-recorded in the ledger");
+    if (apprIdx === -1) failures.push("ordering: greenfield BUILD requires a BUILD-plan approval entry");
+    else if (planIdx !== -1 && planIdx >= apprIdx) failures.push("ordering: BUILD-plan approval is not preceded by plan-recorded");
+    // If BUILD->FINISH has already been recorded (a completed run audited via `jam audit`), both the
+    // plan-recorded AND its approval must PRECEDE that advance — a forged ledger cannot advance first
+    // and back-fill the plan afterward.
+    const finishIdx = ledger.findIndex((x) => x.type === "phase-advanced" && x.from === "BUILD" && x.to === "FINISH");
+    if (finishIdx !== -1) {
+      if (planIdx === -1 || planIdx >= finishIdx) failures.push("ordering: BUILD->FINISH advanced without a preceding plan-recorded");
+      if (apprIdx === -1 || apprIdx >= finishIdx) failures.push("ordering: BUILD->FINISH advanced without a preceding BUILD-plan approval");
+    }
+    // A finished greenfield BUILD (BUILD->FINISH recorded, or the run is already at FINISH) must have ALL
+    // build sprints done — the standalone `jam audit` must be as strict as the live advanceRun's allSprintsDone.
+    if ((finishIdx !== -1 || state.phase === "FINISH") && !allSprintsDone(state)) {
+      failures.push("ordering: greenfield BUILD->FINISH requires all build sprints done");
+    }
+  }
+
+  if (greenfield && typeof state.phase === "string" && ORDER.includes(state.phase) && expectedFrom !== state.phase) {
+    failures.push(`ordering: greenfield phase history is incomplete — the ledger only advanced to ${expectedFrom}, but the run is at ${state.phase} (a phase was skipped or its advance is missing)`);
+  }
 
   const sprints = state.plan?.sprints ?? [];
   ledger.forEach((e, d) => {
