@@ -65,3 +65,18 @@ export function recordRedProof({ runDir: dir, cwd, now }) {
   if (reopened) appendLedger(dir, { at: nowIso(now), type: "spec-reopened", reason: "red-proof re-recorded after certification" });
   return state;
 }
+
+export function recordGameability({ runDir: dir, reviewer, author, survivingFindings, findings, now }) {
+  if (reviewer !== "codex") throw new Error(`recordGameability: the gameability audit must be authored by codex (reviewer=${reviewer})`);
+  if (author && author === reviewer) throw new Error("recordGameability: reviewer must differ from author (anti-collusion)");
+  if (typeof survivingFindings !== "number" || survivingFindings < 0) throw new Error("recordGameability: a numeric survivingFindings (>=0) is required");
+  const state = readState(dir);
+  requireSpecify(state);
+  if (state.gates["SPECIFY-coverage"].status !== "approved") throw new Error("recordGameability: the SPECIFY-coverage gate must be approved first");
+  state.spec.gameability = { reviewer, author: author ?? "claude", survivingFindings, findings: Array.isArray(findings) ? findings : [], at: nowIso(now) };
+  const reopened = reopenSpec(state);   // a new verdict after certification invalidates it
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "gameability-verdict", survivingFindings });
+  if (reopened) appendLedger(dir, { at: nowIso(now), type: "spec-reopened", reason: "gameability re-recorded after certification" });
+  return state;
+}
