@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
-const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded"];
+const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded", "shortlisted", "contested", "decided"];
 const VALID_ACTION_STATUSES = new Set(["proposed", "ratified", "denied", "allowed"]);
 
 export function createInitialState({ runId, topic, now, mode }) {

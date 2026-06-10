@@ -15,7 +15,8 @@ test("phaseOrderFor selects by mode; repair is the default", () => {
   assert.deepEqual(phaseOrderFor("greenfield"), greenfieldPhaseOrder);
   assert.deepEqual(phaseOrderFor(undefined), repairPhaseOrder);
   assert.deepEqual(greenfieldPhaseOrder, ["GROUND", "CONVERGE", "SPECIFY", "BUILD", "FINISH"]);
-  assert.ok(GREENFIELD_STUB_PHASES.has("CONVERGE") && GREENFIELD_STUB_PHASES.has("SPECIFY") && GREENFIELD_STUB_PHASES.has("BUILD"));
+  assert.ok(!GREENFIELD_STUB_PHASES.has("CONVERGE"));
+  assert.ok(GREENFIELD_STUB_PHASES.has("SPECIFY") && GREENFIELD_STUB_PHASES.has("BUILD"));
 });
 
 test("a greenfield run starts at GROUND with both gates and a grounding block", () => {
@@ -37,10 +38,11 @@ test("a repair run is unchanged (DIAGNOSE, single gate, no grounding)", () => {
   assert.equal(s.grounding, undefined);
 });
 
-test("advance into a greenfield stub phase refuses with a 'ships in Gx' message", () => {
+test("advancing GROUND -> CONVERGE now succeeds (CONVERGE is no longer a stub)", () => {
   const dir = createRun({ projectRoot: proj(), runId: "r1", mode: "greenfield", now: "t0" });
   const s = readState(dir);
   s.gates["GROUND"].status = "approved";
   fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify(s, null, 2));
-  assert.throws(() => advanceRun({ runDir: dir, now: "t1" }), /CONVERGE is not yet implemented \(ships in ganjam G2\)/);
+  advanceRun({ runDir: dir, now: "t1" });
+  assert.equal(readState(dir).phase, "CONVERGE");
 });

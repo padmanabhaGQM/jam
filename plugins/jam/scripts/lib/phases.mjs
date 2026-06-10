@@ -23,7 +23,13 @@ export function advancePhase(state) {
     throw new Error(`phase ${next} is not yet implemented (ships in ganjam ${GREENFIELD_STUB_SLICE[next]})`);
   }
   state.phase = next;
-  if (state.mode !== "greenfield" && next !== "IMPLEMENT" && next !== "FINISH") {
+  if (state.mode === "greenfield") {
+    if (next === "CONVERGE") {
+      addGate(state, "CONVERGE-shortlist", "human", "shortlisted");
+      addGate(state, "CONVERGE", "human", "decided");
+      state.convergence = { shortlist: [], decisions: {}, agree: null, tiebreak: null, chosen: null, ledger: [], spikes: [], acceptedUnknowns: [], decided: false };
+    }
+  } else if (next !== "IMPLEMENT" && next !== "FINISH") {
     const approveFrom = next === "VERIFY" ? "verified" : next === "PLAN" ? "planned" : "rendered";
     addGate(state, next, "human", approveFrom);
   }
