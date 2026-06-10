@@ -1,8 +1,10 @@
+import path from "node:path";
 import { readState, writeState, addGate } from "./state.mjs";
 import { evaluateGate } from "./gate.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { allSprintsDone } from "./sprint.mjs";
 import { auditRun } from "./audit.mjs";
+import { runVerification } from "./evidence.mjs";
 import { phaseOrderFor, GREENFIELD_STUB_PHASES, GREENFIELD_STUB_SLICE, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
 
 export { repairPhaseOrder } from "./mode.mjs";
@@ -62,8 +64,20 @@ export function advanceRun({ runDir: dir, now }) {
   const state = readState(dir);
   const from = state.phase;
   if (state.phase === "IMPLEMENT" || (state.mode === "greenfield" && state.phase === "BUILD")) {
+    // 1. Eligibility: a mid-implementation run must not run the final acceptance command at all.
+    //    (Mirrors advancePhase's guard, with the existing message, so it fires BEFORE the live verify.)
+    if (!allSprintsDone(state)) throw new Error(`cannot advance from ${state.phase}: not all sprints done`);
+    // 2. Historical ledger honesty (unchanged).
     const audit = auditRun({ runDir: dir });
     if (!audit.ok) throw new Error(`cannot advance to FINISH: audit failed: ${audit.failures.join("; ")}`);
+    // 3. Live re-verify: the locked verifyCmd must pass against the CURRENT workspace, not just historically.
+    const projectRoot = path.resolve(dir, "..", "..", "..", "..");   // runDir = <root>/docs/superpowers/loop-runs/<id>
+    const cmd = state.plan?.verifyCmd;
+    if (!cmd) throw new Error("cannot advance to FINISH: no verifyCmd in plan");
+    const result = runVerification(cmd, projectRoot);
+    if (result.exitCode !== 0) throw new Error(`cannot advance to FINISH: verifyCmd is currently red (exit ${result.exitCode}): ${cmd}`);
+    // 4. Only now, after honesty AND liveness pass, record the final-verification.
+    appendLedger(dir, { at: now ?? new Date().toISOString(), type: "final-verification", command: cmd, exitCode: 0 });
   }
   advancePhase(state);
   writeState(dir, state);

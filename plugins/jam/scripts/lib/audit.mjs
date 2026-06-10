@@ -124,6 +124,16 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     failures.push(`ordering: greenfield phase history is incomplete — the ledger only advanced to ${expectedFrom}, but the run is at ${state.phase} (a phase was skipped or its advance is missing)`);
   }
 
+  // Only a FINISHED run is required to carry a fresh final-verification. The LIVE transition is gated by
+  // advanceRun's own re-verify (which appends the entry before advancing); a standalone `jam audit` at
+  // IMPLEMENT/BUILD with all sprints done must NOT require it (the run hasn't advanced yet).
+  if (state.phase === "FINISH") {
+    let lastSprintDone = -1;
+    ledger.forEach((e, i) => { if (e.type === "sprint-done") lastSprintDone = i; });
+    const finalOk = ledger.some((e, i) => e.type === "final-verification" && e.exitCode === 0 && i > lastSprintDone);
+    if (!finalOk) failures.push("evidence: FINISH requires a final-verification (verifyCmd exit 0) recorded after the last sprint");
+  }
+
   const sprints = state.plan?.sprints ?? [];
   ledger.forEach((e, d) => {
     if (e.type !== "sprint-done") return;
