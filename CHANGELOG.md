@@ -5,6 +5,13 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.14.0 — SPECIFY phase (ganjam G3)
+- Greenfield's third phase: author the project's GLOBAL `verifyCmd` as a human-ratified SSOT.
+- Un-gameable triad before ratification: RED-FIRST (verifyCmd must exit non-zero on the un-built project), COVERAGE (every G2 acceptance dimension bound to ≥1 check), and a Codex GAMEABILITY audit (zero surviving "hollow check" findings).
+- Two gates: `SPECIFY-coverage` → `SPECIFY` (the SSOT). Editing the suite re-arms the gate and clears stale proofs.
+- `jam specify coverage|redproof|gameability|certify`. The certified verifyCmd is what BUILD (G4) will gate on.
+- `BUILD` remains a stub (ships in G4).
+
 ## 0.13.0 — CONVERGE phase (ganjam G2)
 - Greenfield's second phase: adversarial decision-convergence from the grounded-intent to one evidence-backed, human-ratified decision.
 - Two independent decisions (Claude + Codex); agreement converges, disagreement raises a `CONVERGE-tiebreak` gate the human rules.

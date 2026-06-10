@@ -39,5 +39,15 @@ CONVERGE turns the grounded-intent into ONE evidence-backed decision via two ind
 5. **Finalize** — build the decision-ledger covering EVERY dimension. `satisfied` requires a registered, real spike transcript (`evidenceRef` listed in `spikes[]`); `unmet` requires `accepted:true`; every G1 open-unknown must be in `acceptedUnknowns`. `jam converge finalize --file {ledger:[...], spikes:[...], acceptedUnknowns:[...]}` → `CONVERGE` flips to `decided`. Any later change re-arms the gate.
 6. **Ratify** — **`jam approve CONVERGE`**, then `jam advance` (reports `SPECIFY` ships in G3).
 
+## The SPECIFY flow (after CONVERGE is ratified + advanced)
+
+SPECIFY authors the project's GLOBAL `verifyCmd` as a human-ratified SSOT, proven un-gameable.
+
+1. **Author the acceptance suite** — invoke `superpowers:test-driven-development`. Claude+Codex write the executable acceptance tests/validators/fixtures (the spec-as-tests) + the `verifyCmd` that runs them, and map every G2 acceptance dimension to ≥1 check. `jam specify coverage --file {verifyCmd, checks:[{id, dimension, ref}]}`. Present to the human: **`jam approve SPECIFY-coverage`** before the audit.
+2. **Red-first** — `jam specify redproof` runs the verifyCmd on the un-built project; it MUST exit non-zero (a verifyCmd that already passes tests nothing).
+3. **Gameability audit** — invoke `superpowers:verification-before-completion`; Codex (independent) attacks each check (hollow? tautological? can verifyCmd pass without the goal?) and returns a verdict. `jam specify gameability --file {reviewer:"codex", author:"claude", survivingFindings, findings:[...]}`. A surviving finding means fix the suite (re-`coverage`, which re-arms) and re-audit.
+4. **Certify** — `jam specify certify` flips SPECIFY to `specified` only if coverage-approved, every dimension covered, red-first non-zero, and zero surviving findings.
+5. **Ratify the SSOT** — **`jam approve SPECIFY`**, then `jam advance` (reports `BUILD` ships in G4). The certified verifyCmd is the SSOT the build will be gated by. Editing the suite after certify re-arms the gate.
+
 ## Status
 `jam status` shows `mode greenfield · phase GROUND`, the grounding summary (problem/dimensions/claims-by-status/converged), and both gates.
