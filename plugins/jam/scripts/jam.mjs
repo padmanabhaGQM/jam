@@ -18,6 +18,7 @@ import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { sharpenIntent, addClaim, refuteClaim, convergeGrounding } from "./lib/grounding.mjs";
 import { setShortlist, recordDecision, ruleTiebreak, convergeDecision } from "./lib/convergence.mjs";
+import { setCoverage, recordRedProof, recordGameability, certifyVerifyCmd } from "./lib/spec.mjs";
 import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession } from "./lib/sprint.mjs";
@@ -88,6 +89,12 @@ function cmdStatus(cwd) {
       const byStatus = (c.ledger ?? []).reduce((m, r) => ((m[r.status] = (m[r.status] ?? 0) + 1), m), {});
       const agreeStr = c.agree === null ? "pending" : c.agree ? "agree" : "DISAGREE";
       lines.push(`  convergence: shortlist ${(c.shortlist ?? []).length} · decisions ${Object.keys(c.decisions ?? {}).length}/2 (${agreeStr}) · chosen ${c.chosen ?? "—"} · ledger ${(c.ledger ?? []).length}${Object.keys(byStatus).length ? " (" + Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(", ") + ")" : ""} · decided ${c.decided ? "yes" : "no"}`);
+    }
+    if (state.spec) {
+      const sp = state.spec;
+      const red = sp.redProof ? `exit ${sp.redProof.exitCode}` : "none";
+      const game = sp.gameability ? `${sp.gameability.survivingFindings} surviving` : "none";
+      lines.push(`  spec: verifyCmd ${sp.verifyCmd ? "set" : "unset"} · checks ${(sp.checks ?? []).length} · red-proof ${red} · gameability ${game} · certified ${sp.certified ? "yes" : "no"}`);
     }
   }
   for (const [id, g] of Object.entries(state.gates)) {
@@ -280,6 +287,39 @@ function cmdConverge(cwd, positional, flags) {
   } catch (e) { return fail(e.message); }
 }
 
+function cmdSpecify(cwd, positional, flags) {
+  const sub = positional[0];
+  const { dir } = requireActiveRun(cwd);
+  const readFile = () => {
+    if (!flags.file) return fail("usage: jam specify <coverage|gameability> --file <json>  (redproof/certify take no file)");
+    return JSON.parse(fs.readFileSync(flags.file, "utf8"));
+  };
+  try {
+    switch (sub) {
+      case "coverage": {
+        const o = readFile();
+        setCoverage({ runDir: dir, verifyCmd: o.verifyCmd, checks: o.checks });
+        return process.stdout.write(`coverage set; approve with: jam approve SPECIFY-coverage\n`);
+      }
+      case "redproof": {
+        const s = recordRedProof({ runDir: dir, cwd });
+        return process.stdout.write(`red-first: verifyCmd exited ${s.spec.redProof.exitCode}${s.spec.redProof.exitCode === 0 ? " — WARNING: must be non-zero to certify" : ""}\n`);
+      }
+      case "gameability": {
+        const o = readFile();
+        recordGameability({ runDir: dir, reviewer: o.reviewer, author: o.author, survivingFindings: o.survivingFindings, findings: o.findings });
+        return process.stdout.write(`gameability verdict recorded (surviving: ${o.survivingFindings})\n`);
+      }
+      case "certify": {
+        certifyVerifyCmd({ runDir: dir, cwd });
+        return process.stdout.write(`verifyCmd certified; ratify the SSOT with: jam approve SPECIFY\n`);
+      }
+      default:
+        return fail("usage: jam specify <coverage|redproof|gameability|certify>");
+    }
+  } catch (e) { return fail(e.message); }
+}
+
 function cmdCancel(cwd, positional, flags) {
   const { runId, dir } = requireActiveRun(cwd);
   if (flags.confirm !== runId) return fail(`cancel is irreversible — re-run with --confirm ${runId}`);
@@ -458,6 +498,8 @@ async function main() {
       return cmdGround(cwd, positional, flags);
     case "converge":
       return cmdConverge(cwd, positional, flags);
+    case "specify":
+      return cmdSpecify(cwd, positional, flags);
     case "status":
       return cmdStatus(cwd);
     case "render-digest":
