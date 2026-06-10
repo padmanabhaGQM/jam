@@ -9,12 +9,18 @@ import { phaseOrderFor, GREENFIELD_STUB_PHASES, GREENFIELD_STUB_SLICE, REQUIRED_
 
 export { repairPhaseOrder } from "./mode.mjs";
 
-export function advancePhase(state) {
+export function advancePhase(state, { verified = false } = {}) {
   const order = phaseOrderFor(state.mode);
   const i = order.indexOf(state.phase);
   if (i === -1) throw new Error(`advancePhase: ${state.phase} is not a phase in mode ${state.mode ?? "repair"}`);
   const next = order[i + 1];
   if (!next) throw new Error(state.mode === "greenfield" ? `already at the final phase (${state.phase})` : `already at the final repair phase (${state.phase})`);
+  // The FINISH transition requires the live verifyCmd re-verification that only advanceRun performs
+  // (it has the run dir / project root). Refuse it here so the exported advancePhase cannot be used as a
+  // public-lib bypass that persists FINISH without re-verifying the current workspace.
+  if (next === "FINISH" && !verified) {
+    throw new Error("advancePhase: the FINISH transition requires live verifyCmd re-verification — call advanceRun, not advancePhase");
+  }
   if (state.phase === "IMPLEMENT" || (state.mode === "greenfield" && state.phase === "BUILD")) {
     if (!allSprintsDone(state)) throw new Error(`cannot advance from ${state.phase}: not all sprints done`);
   }
@@ -79,7 +85,9 @@ export function advanceRun({ runDir: dir, now }) {
     // 4. Only now, after honesty AND liveness pass, record the final-verification.
     appendLedger(dir, { at: now ?? new Date().toISOString(), type: "final-verification", command: cmd, exitCode: 0 });
   }
-  advancePhase(state);
+  // verified:true — advanceRun only reaches a FINISH transition after the live re-verify above (FINISH's
+  // only predecessors are IMPLEMENT/BUILD, which always go through that block).
+  advancePhase(state, { verified: true });
   writeState(dir, state);
   appendLedger(dir, { at: now ?? new Date().toISOString(), type: "phase-advanced", from, to: state.phase });
   return state;

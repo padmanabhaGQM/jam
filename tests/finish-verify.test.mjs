@@ -79,3 +79,16 @@ test("greenfield BUILD->FINISH is REFUSED when the locked verifyCmd is now red",
   fs.rmSync(path.join(projectRoot, "built.flag"));               // break the tree after the sprint passed
   assert.throws(() => advanceRun({ runDir: dir, now: "tb7" }), /currently red/);
 });
+
+// advancePhase is the in-memory transition core; it must REFUSE the FINISH transition unless advanceRun
+// (which performs the live re-verify) authorizes it — closing the exported-advancePhase bypass.
+test("advancePhase refuses the FINISH transition without the verified flag", async () => {
+  const { createInitialState } = await import("../plugins/jam/scripts/lib/state.mjs");
+  const { advancePhase } = await import("../plugins/jam/scripts/lib/phases.mjs");
+  const s = createInitialState({ runId: "r1", now: "t", mode: "repair" });
+  s.phase = "IMPLEMENT";
+  s.plan = { verifyCmd: "true", sprints: [{ id: "s1", title: "t", status: "done", provenance: "planned" }] };
+  assert.throws(() => advancePhase(s), /requires live verifyCmd re-verification/);
+  assert.doesNotThrow(() => advancePhase(s, { verified: true }));   // advanceRun's authorized path
+  assert.equal(s.phase, "FINISH");
+});
