@@ -36,7 +36,8 @@ test("CLI drives CONVERGE agree-path end-to-end to the SPECIFY-stub boundary", (
   assert.match(jam(root, ["status"]).stdout, /CONVERGE: human\/decided|decided/);
   jam(root, ["approve", "CONVERGE"]);
   const adv = jam(root, ["advance"]);
-  assert.match(adv.stderr + adv.stdout, /SPECIFY is not yet implemented \(ships in ganjam G3\)/);
+  assert.equal(adv.status, 0);
+  assert.match(jam(root, ["status"]).stdout, /phase SPECIFY/);
 });
 
 test("CLI disagree-path requires a tiebreak before finalize", () => {
