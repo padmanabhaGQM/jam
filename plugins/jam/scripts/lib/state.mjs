@@ -2,28 +2,38 @@ import fs from "node:fs";
 import path from "node:path";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
-const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified"];
+const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded"];
 const VALID_ACTION_STATUSES = new Set(["proposed", "ratified", "denied", "allowed"]);
 
 export function createInitialState({ runId, topic, now, mode }) {
   if (!runId) throw new Error("createInitialState: runId required");
   const repair = mode === "repair";
-  const phase = repair ? "DIAGNOSE" : "ALIGN";
-  const firstGate = repair ? "DIAGNOSE" : "ALIGN";
+  const greenfield = mode === "greenfield";
+  const phase = repair ? "DIAGNOSE" : greenfield ? "GROUND" : "ALIGN";
   const state = {
     runId,
     topic: topic ?? "",
     phase,
     currentSprint: null,
     createdAt: now ?? new Date().toISOString(),
-    gates: {
-      [firstGate]: { mode: "human", status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null, approveFrom: "rendered" }
-    },
+    gates: {},
     dial: {},
     coverage: [],
     steeringDirectives: [],
     runaway: {}
   };
+  const humanGate = (approveFrom) => ({ mode: "human", status: "pending", approvedBy: null, approvedAt: null, evidenceRef: null, approveFrom });
+  if (greenfield) {
+    state.gates["GROUND-scope"] = humanGate("scoped");
+    state.gates["GROUND"] = humanGate("grounded");
+    state.mode = "greenfield";
+    state.goalRef = null;
+    state.goalSource = null;
+    state.grounding = { problem: null, dimensions: [], options: [], claims: [], openUnknowns: [], converged: false };
+  } else {
+    const firstGate = repair ? "DIAGNOSE" : "ALIGN";
+    state.gates[firstGate] = humanGate("rendered");
+  }
   if (repair) {
     state.mode = "repair";
     state.goalRef = null;
@@ -40,6 +50,9 @@ export function validateState(state) {
   }
   for (const k of ["runId", "phase", "gates", "dial", "createdAt"]) {
     if (!(k in state)) errors.push(`state missing required field: ${k}`);
+  }
+  if ("mode" in state && !["repair", "greenfield"].includes(state.mode)) {
+    errors.push(`invalid mode: ${state.mode}`);
   }
   for (const [id, g] of Object.entries(state.gates ?? {})) {
     if (!VALID_MODES.includes(g.mode)) errors.push(`gate ${id}: invalid mode ${g.mode}`);
