@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "spec",
+  "type": "object",
+  "required": ["verifyCmd", "checks", "certified"],
+  "properties": {
+    "verifyCmd": { "type": ["string", "null"] },
+    "checks": { "type": "array", "items": {
+      "type": "object",
+      "required": ["id", "dimension", "ref"],
+      "properties": {
+        "id": { "type": "string" },
+        "dimension": { "type": "string" },
+        "ref": { "type": "string" },
+        "kind": { "type": "string" },
+        "describes": { "type": "string" }
+      }
+    } },
+    "redProof": { "type": ["object", "null"], "properties": { "exitCode": { "type": "integer" }, "at": { "type": "string" } } },
+    "gameability": { "type": ["object", "null"] },
+    "certified": { "type": "boolean" }
+  }
+}

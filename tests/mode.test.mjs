@@ -16,7 +16,8 @@ test("phaseOrderFor selects by mode; repair is the default", () => {
   assert.deepEqual(phaseOrderFor(undefined), repairPhaseOrder);
   assert.deepEqual(greenfieldPhaseOrder, ["GROUND", "CONVERGE", "SPECIFY", "BUILD", "FINISH"]);
   assert.ok(!GREENFIELD_STUB_PHASES.has("CONVERGE"));
-  assert.ok(GREENFIELD_STUB_PHASES.has("SPECIFY") && GREENFIELD_STUB_PHASES.has("BUILD"));
+  assert.ok(!GREENFIELD_STUB_PHASES.has("SPECIFY"));
+  assert.ok(GREENFIELD_STUB_PHASES.has("BUILD"));
 });
 
 test("a greenfield run starts at GROUND with both gates and a grounding block", () => {

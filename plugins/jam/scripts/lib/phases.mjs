@@ -28,6 +28,10 @@ export function advancePhase(state) {
       addGate(state, "CONVERGE-shortlist", "human", "shortlisted");
       addGate(state, "CONVERGE", "human", "decided");
       state.convergence = { shortlist: [], decisions: {}, agree: null, tiebreak: null, chosen: null, ledger: [], spikes: [], acceptedUnknowns: [], decided: false };
+    } else if (next === "SPECIFY") {
+      addGate(state, "SPECIFY-coverage", "human", "covered");
+      addGate(state, "SPECIFY", "human", "specified");
+      state.spec = { verifyCmd: null, checks: [], redProof: null, gameability: null, certified: false };
     }
   } else if (next !== "IMPLEMENT" && next !== "FINISH") {
     const approveFrom = next === "VERIFY" ? "verified" : next === "PLAN" ? "planned" : "rendered";

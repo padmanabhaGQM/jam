@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const VALID_MODES = ["human", "show-and-proceed", "auto"];
-const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded", "shortlisted", "contested", "decided"];
+const VALID_STATUSES = ["pending", "rendered", "verified", "planned", "evidence-passed", "approved", "rejected", "ratified", "scoped", "grounded", "shortlisted", "contested", "decided", "covered", "specified"];
 const VALID_ACTION_STATUSES = new Set(["proposed", "ratified", "denied", "allowed"]);
 
 export function createInitialState({ runId, topic, now, mode }) {
@@ -131,6 +131,18 @@ export function validateState(state) {
   if (state.convergence && state.gates && state.gates["CONVERGE"] &&
       ["decided", "approved"].includes(state.gates["CONVERGE"].status) && state.convergence.decided !== true) {
     errors.push("CONVERGE gate is decided/approved but convergence.decided is not true");
+  }
+  if (state.spec && Array.isArray(state.spec.checks)) {
+    for (const c of state.spec.checks) {
+      if (!c || typeof c.id !== "string" || typeof c.dimension !== "string" || typeof c.ref !== "string") {
+        errors.push(`spec check invalid: ${c && c.id ? c.id : "(unnamed)"}`);
+      }
+    }
+  }
+  if (state.gates && state.gates["SPECIFY"] && ["specified", "approved"].includes(state.gates["SPECIFY"].status)) {
+    if (!state.spec || state.spec.certified !== true) {
+      errors.push("SPECIFY gate is specified/approved but spec is missing or not certified");
+    }
   }
   return errors;
 }

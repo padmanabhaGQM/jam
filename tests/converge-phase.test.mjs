@@ -25,11 +25,12 @@ test("KEY RED-TEAM: G1 grounding is FROZEN after advancing to CONVERGE (no late 
   assert.deepEqual(readState(dir).grounding.dimensions, ["WER<5%"]);  // unchanged
 });
 
-test("SPECIFY is still a stub: advancing from CONVERGE refuses once CONVERGE is (forcibly) approved", () => {
+test("advancing CONVERGE -> SPECIFY now succeeds (SPECIFY is no longer a stub)", () => {
   const dir = atConverge();
   const s = readState(dir);
   s.gates["CONVERGE"].status = "approved";
   s.convergence.decided = true;
   fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify(s, null, 2));
-  assert.throws(() => advanceRun({ runDir: dir, now: "t7" }), /SPECIFY is not yet implemented \(ships in ganjam G3\)/);
+  advanceRun({ runDir: dir, now: "t7" });
+  assert.equal(readState(dir).phase, "SPECIFY");
 });

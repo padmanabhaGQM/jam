@@ -103,7 +103,8 @@ test("after decided+approval, advancing hits the SPECIFY stub", () => {
   const tr = spike(dir, "s1.jsonl");
   convergeDecision({ runDir: dir, ledger: [{ dimension: "WER<5%", status: "satisfied", evidenceRef: tr }], spikes: [{ id: "s1", dimension: "WER<5%", evidenceRef: tr }], now: "t11" });
   recordApproval({ runDir: dir, gateId: "CONVERGE", who: "u", now: "t12" });
-  assert.throws(() => advanceRun({ runDir: dir, now: "t13" }), /SPECIFY is not yet implemented \(ships in ganjam G3\)/);
+  advanceRun({ runDir: dir, now: "t13" });
+  assert.equal(readState(dir).phase, "SPECIFY");
 });
 
 test("validateState rejects a 'satisfied' row with no evidenceRef and unmet/at-risk rows without accepted", () => {
