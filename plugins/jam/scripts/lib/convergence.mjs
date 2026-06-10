@@ -73,3 +73,21 @@ export function recordDecision({ runDir: dir, agent, chosen, rationale, spikes, 
   if (reopened) appendLedger(dir, { at: nowIso(now), type: "convergence-reopened", reason: `decision recorded by ${agent}` });
   return state;
 }
+
+export function ruleTiebreak({ runDir: dir, chosen, now }) {
+  if (!chosen) throw new Error("ruleTiebreak: a chosen option is required");
+  const state = readState(dir);
+  requireConverge(state);
+  if (state.convergence.agree !== false || !state.gates["CONVERGE-tiebreak"]) {
+    throw new Error("ruleTiebreak: no active disagreement to rule — the agents did not disagree");
+  }
+  if (!state.convergence.shortlist.includes(chosen)) throw new Error(`ruleTiebreak: "${chosen}" is not in the shortlist`);
+  state.convergence.tiebreak = { chosen, by: "user", at: nowIso(now) };
+  state.convergence.chosen = chosen;
+  state.gates["CONVERGE-tiebreak"].status = "approved";
+  const reopened = reopenDecision(state);   // re-ruling after a decision invalidates it
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "tiebreak-ruled", chosen, who: "user" });
+  if (reopened) appendLedger(dir, { at: nowIso(now), type: "convergence-reopened", reason: "tiebreak re-ruled" });
+  return state;
+}
