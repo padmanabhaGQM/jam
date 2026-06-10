@@ -116,6 +116,18 @@ export function validateState(state) {
       }
     }
   }
+  if (state.convergence && Array.isArray(state.convergence.ledger)) {
+    for (const r of state.convergence.ledger) {
+      const ok = r && typeof r.dimension === "string" && ["satisfied", "at-risk", "unmet"].includes(r.status);
+      if (!ok) { errors.push(`convergence ledger row invalid: ${r && r.dimension ? r.dimension : "(unnamed)"}`); continue; }
+      if (r.status === "satisfied" && (typeof r.evidenceRef !== "string" || r.evidenceRef.length === 0)) {
+        errors.push(`convergence ledger ${r.dimension}: a 'satisfied' dimension must carry an evidenceRef`);
+      }
+      if (r.status === "unmet" && r.accepted !== true) {
+        errors.push(`convergence ledger ${r.dimension}: an 'unmet' dimension must be accepted`);
+      }
+    }
+  }
   return errors;
 }
 

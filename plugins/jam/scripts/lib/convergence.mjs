@@ -91,3 +91,52 @@ export function ruleTiebreak({ runDir: dir, chosen, now }) {
   if (reopened) appendLedger(dir, { at: nowIso(now), type: "convergence-reopened", reason: "tiebreak re-ruled" });
   return state;
 }
+
+export function convergeDecision({ runDir: dir, ledger, spikes, acceptedUnknowns, now }) {
+  const state = readState(dir);
+  requireConverge(state);
+  if (state.gates["CONVERGE-shortlist"].status !== "approved") throw new Error("convergeDecision: the CONVERGE-shortlist gate must be approved first");
+  const c = state.convergence;
+  if (!c.decisions.claude || !c.decisions.codex) throw new Error("convergeDecision: both agent decisions must be recorded");
+  if (c.agree === false && (!state.gates["CONVERGE-tiebreak"] || state.gates["CONVERGE-tiebreak"].status !== "approved")) {
+    throw new Error("convergeDecision: the agents disagree — rule the tiebreak first (jam converge tiebreak --choose <opt>)");
+  }
+  if (!c.chosen || !c.shortlist.includes(c.chosen)) throw new Error("convergeDecision: no chosen option in the approved shortlist");
+  if (Array.isArray(ledger)) c.ledger = ledger;
+  if (Array.isArray(spikes)) c.spikes = spikes;
+  if (Array.isArray(acceptedUnknowns)) c.acceptedUnknowns = acceptedUnknowns;
+  // every spike transcript must exist
+  const spikeRefs = new Set();
+  for (const s of (c.spikes ?? [])) {
+    if (!s.evidenceRef || !fs.existsSync(s.evidenceRef)) throw new Error(`convergeDecision: spike ${s.id} has no locatable transcript`);
+    spikeRefs.add(s.evidenceRef);
+  }
+  // every G1 dimension must appear; satisfied => registered+real spike; unmet => accepted
+  const dims = (state.grounding && Array.isArray(state.grounding.dimensions)) ? state.grounding.dimensions : [];
+  const covered = new Set(c.ledger.map((r) => r.dimension));
+  for (const d of dims) {
+    if (!covered.has(d)) throw new Error(`convergeDecision: dimension ${d} is missing from the decision-ledger`);
+  }
+  for (const r of c.ledger) {
+    if (r.status === "satisfied") {
+      if (!r.evidenceRef || !spikeRefs.has(r.evidenceRef)) {
+        throw new Error(`convergeDecision: dimension "${r.dimension}" is 'satisfied' but its evidenceRef is not a registered spike`);
+      }
+      if (!fs.existsSync(r.evidenceRef)) {
+        throw new Error(`convergeDecision: dimension "${r.dimension}" spike transcript is not locatable (${r.evidenceRef})`);
+      }
+    } else if (r.status === "unmet") {
+      if (r.accepted !== true) throw new Error(`convergeDecision: dimension "${r.dimension}" is unmet and not accepted — accept the risk or change the decision`);
+    }
+  }
+  // every carried-forward G1 open-unknown must be explicitly accepted
+  const accepted = new Set(c.acceptedUnknowns ?? []);
+  for (const u of (state.grounding?.openUnknowns ?? [])) {
+    if (!accepted.has(u)) throw new Error(`convergeDecision: open-unknown "${u}" is not in acceptedUnknowns — resolve or accept it`);
+  }
+  c.decided = true;
+  state.gates["CONVERGE"].status = "decided";
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "convergence-decided", chosen: c.chosen, dimensions: dims.length });
+  return state;
+}

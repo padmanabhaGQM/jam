@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "convergence",
+  "type": "object",
+  "required": ["shortlist", "decisions", "chosen", "ledger"],
+  "properties": {
+    "shortlist": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 3 },
+    "decisions": { "type": "object" },
+    "agree": { "type": ["boolean", "null"] },
+    "tiebreak": { "type": ["object", "null"] },
+    "chosen": { "type": ["string", "null"] },
+    "ledger": { "type": "array", "items": {
+      "type": "object",
+      "required": ["dimension", "status"],
+      "properties": {
+        "dimension": { "type": "string" },
+        "status": { "enum": ["satisfied", "at-risk", "unmet"] },
+        "rationale": { "type": "string" },
+        "evidenceRef": { "type": ["string", "null"] },
+        "accepted": { "type": "boolean" }
+      }
+    } },
+    "spikes": { "type": "array", "items": {
+      "type": "object",
+      "required": ["id", "evidenceRef"],
+      "properties": { "id": { "type": "string" }, "dimension": { "type": "string" }, "evidenceRef": { "type": "string" } }
+    } },
+    "acceptedUnknowns": { "type": "array", "items": { "type": "string" } },
+    "decided": { "type": "boolean" }
+  }
+}
