@@ -55,7 +55,7 @@ BUILD builds the project to the certified bar, reusing the repair sprint loop. T
 
 1. **Decompose** — invoke `superpowers:writing-plans`. Break the build into sprints tied to the decision + the SSOT's checks. `jam build plan --file {sprints:[{id,title,acceptanceCriteria,needs}]}` (verifyCmd is auto-locked to the certified SSOT — you cannot change it). Present to the human: **`jam approve BUILD-plan`**.
 2. **Build each sprint** (dependency-ordered) — the SAME gated loop as repair: `jam sprint <id> --start`; `jam codex-run --sprint <id>` (Codex builds; role-binding); `jam sprint <id> --verify` (runs the locked SSOT verifyCmd; passes only on exit 0); `jam sprint <id> --done` (refuses unless verified AND Codex-authored). Any irreversible action still goes through `jam propose-action`/`ratify` (G0).
-3. **Finish** — when every sprint is done, `jam advance` runs the run-honesty audit over the whole greenfield run and reaches **FINISH**. The project is built to exactly the certified bar.
+3. **Finish** — when every sprint is done, `jam advance` runs the run-honesty audit over the whole greenfield run and reaches **FINISH**. The project is built to exactly the certified bar. FINISH re-runs the certified `verifyCmd` against the live tree (not just historical evidence), and each sprint's Codex authorship is content-bound to its rollout's `session_meta` id.
 
 ## Status
 `jam status` shows the active greenfield phase, current gates, and phase-specific artifacts including grounding, convergence, specification, and BUILD sprints.
