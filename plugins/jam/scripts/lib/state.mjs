@@ -111,6 +111,9 @@ export function validateState(state) {
         && ["evidenced", "open-unknown"].includes(c.status)
         && ["claude", "codex", "both"].includes(c.source);
       if (!ok) errors.push(`grounding claim invalid: ${c && c.id ? c.id : "(unnamed)"}`);
+      else if (c.kind === "feasibility" && c.status === "evidenced" && (typeof c.evidenceRef !== "string" || c.evidenceRef.length === 0)) {
+        errors.push(`grounding claim ${c.id}: an evidenced feasibility claim must carry an evidenceRef`);
+      }
     }
   }
   return errors;

@@ -9,16 +9,30 @@ function requireGreenfield(state) {
   if (!state.grounding) throw new Error("grounding block missing from state");
 }
 
+// Any change to the intent or claim-ledger after a convergence invalidates it:
+// re-arm the GROUND gate so a human cannot ratify a stale grounding. Returns true if it re-armed.
+function reopenConvergence(state) {
+  const past = state.grounding.converged === true || ["grounded", "approved"].includes(state.gates["GROUND"].status);
+  if (!past) return false;
+  state.grounding.converged = false;
+  if (["grounded", "approved"].includes(state.gates["GROUND"].status)) state.gates["GROUND"].status = "pending";
+  return true;
+}
+
 export function sharpenIntent({ runDir: dir, problem, dimensions, now }) {
   if (!problem || !problem.trim()) throw new Error("sharpenIntent: a non-empty problem statement is required");
   if (!Array.isArray(dimensions) || dimensions.length === 0) throw new Error("sharpenIntent: at least one acceptance dimension is required");
   const state = readState(dir);
   requireGreenfield(state);
+  const wasApproved = state.gates["GROUND-scope"].status === "approved";
   state.grounding.problem = problem;
   state.grounding.dimensions = dimensions;
   state.gates["GROUND-scope"].status = "scoped";
+  const reopened = reopenConvergence(state);
   writeState(dir, state);
   appendLedger(dir, { at: nowIso(now), type: "intent-sharpened" });
+  if (wasApproved) appendLedger(dir, { at: nowIso(now), type: "scope-reopened" });
+  if (reopened) appendLedger(dir, { at: nowIso(now), type: "grounding-reopened", reason: "intent re-sharpened" });
   return state;
 }
 
@@ -40,8 +54,10 @@ export function addClaim({ runDir: dir, id, text, kind, status, source, evidence
     if (!fs.existsSync(evidenceRef)) throw new Error(`addClaim: evidence transcript not found at ${evidenceRef} (does not exist)`);
   }
   state.grounding.claims.push({ id, text, kind, status, source, evidenceRef: evidenceRef ?? null });
+  const reopened = reopenConvergence(state);
   writeState(dir, state);
   appendLedger(dir, { at: nowIso(now), type: status === "evidenced" ? "claim-evidenced" : "claim-added", id, kind, source });
+  if (reopened) appendLedger(dir, { at: nowIso(now), type: "grounding-reopened", reason: `claim ${id} added after convergence` });
   return state;
 }
 
@@ -51,8 +67,10 @@ export function refuteClaim({ runDir: dir, id, now }) {
   const before = state.grounding.claims.length;
   state.grounding.claims = state.grounding.claims.filter((c) => c.id !== id);
   if (state.grounding.claims.length === before) throw new Error(`refuteClaim: unknown claim ${id}`);
+  const reopened = reopenConvergence(state);
   writeState(dir, state);
   appendLedger(dir, { at: nowIso(now), type: "claim-refuted", id });
+  if (reopened) appendLedger(dir, { at: nowIso(now), type: "grounding-reopened", reason: `claim ${id} refuted after convergence` });
   return state;
 }
 
