@@ -3,7 +3,7 @@ import { evaluateGate } from "./gate.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { allSprintsDone } from "./sprint.mjs";
 import { auditRun } from "./audit.mjs";
-import { phaseOrderFor, GREENFIELD_STUB_PHASES, GREENFIELD_STUB_SLICE } from "./mode.mjs";
+import { phaseOrderFor, GREENFIELD_STUB_PHASES, GREENFIELD_STUB_SLICE, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
 
 export { repairPhaseOrder } from "./mode.mjs";
 
@@ -17,6 +17,9 @@ export function advancePhase(state) {
     if (!allSprintsDone(state)) throw new Error(`cannot advance from ${state.phase}: not all sprints done`);
   }
   if (state.mode === "greenfield") {
+    for (const id of (REQUIRED_GREENFIELD_GATES[state.phase] ?? [])) {
+      if (!state.gates[id]) throw new Error(`cannot advance from ${state.phase}: required gate ${id} is missing`);
+    }
     // I2: every gate of the current phase (main + sub-gates) must be approved before advancing
     for (const id of Object.keys(state.gates)) {
       if (id === state.phase || id.startsWith(state.phase + "-")) {

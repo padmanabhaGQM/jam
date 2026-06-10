@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { evaluateAudit } from "../plugins/jam/scripts/lib/audit.mjs";
+import { validateState } from "../plugins/jam/scripts/lib/state.mjs";
 
 const yes = () => true;
 
@@ -10,9 +11,9 @@ const yes = () => true;
 function gfLedger() {
   return [
     { type: "intent-sharpened" },
-    { type: "grounding-converged" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
-    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
-    { type: "spec-certified" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
+    { type: "grounding-converged" }, { type: "approval", gateId: "GROUND-scope" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
+    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
+    { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
     { type: "plan-recorded" }, { type: "approval", gateId: "BUILD-plan" },
     { type: "codex-bound", sprintId: "b1" },
     { type: "evidence", sprintId: "b1", gateId: "sprint-b1", exitCode: 0 },
@@ -25,7 +26,8 @@ function gfLedger() {
 // (b1) with a bound session + transcript so the sprint-honesty checks genuinely pass (not vacuously).
 const gfState = () => ({
   mode: "greenfield", phase: "FINISH",
-  plan: { sprints: [{ id: "b1", status: "done", provenance: "planned", codexSessions: [{ transcriptPath: "/x.jsonl" }] }] },
+  spec: { certified: true, verifyCmd: "exit 1" },
+  plan: { verifyCmd: "exit 1", sprints: [{ id: "b1", status: "done", provenance: "planned", codexSessions: [{ transcriptPath: "/x.jsonl" }] }] },
   promotions: [],
   gates: { "BUILD-plan": { mode: "human", status: "approved" } },
 });
@@ -78,9 +80,9 @@ test("KEY RED-TEAM: a forged greenfield BUILD state with NO BUILD-plan gate fail
 test("KEY RED-TEAM: a greenfield ledger that advances BUILD->FINISH BEFORE recording the plan fails the audit", () => {
   // plan-recorded + BUILD-plan approval are back-filled AFTER the BUILD->FINISH advance.
   const led = [
-    { type: "grounding-converged" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
-    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
-    { type: "spec-certified" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
+    { type: "grounding-converged" }, { type: "approval", gateId: "GROUND-scope" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
+    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
+    { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
     { type: "phase-advanced", from: "BUILD", to: "FINISH" },   // advanced BEFORE the plan was recorded
     { type: "plan-recorded" }, { type: "approval", gateId: "BUILD-plan" },
   ];
@@ -101,11 +103,28 @@ test("KEY RED-TEAM: a greenfield BUILD run missing the SPECIFY->BUILD advance (s
   // The per-advance ordering checks never fire for a missing advance — only the Step 3c
   // complete-prefix check catches it.
   const led = [
-    { type: "grounding-converged" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
-    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
-    { type: "spec-certified" }, { type: "approval", gateId: "SPECIFY" },   // NO phase-advanced SPECIFY->BUILD
+    { type: "grounding-converged" }, { type: "approval", gateId: "GROUND-scope" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
+    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
+    { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" },   // NO phase-advanced SPECIFY->BUILD
     { type: "plan-recorded" }, { type: "approval", gateId: "BUILD-plan" },
   ];
   const r = evaluateAudit({ ledger: led, state: { ...gfState(), phase: "BUILD" }, transcriptExists: yes });
   assert.ok(r.failures.some((f) => /incomplete|phase was skipped|only advanced to/.test(f)));
+});
+
+test("KEY RED-TEAM: a greenfield phase advanced without a required sub-gate approval fails the audit", () => {
+  const led = gfLedger().filter((e) => !(e.type === "approval" && e.gateId === "SPECIFY-coverage"));
+  const r = evaluateAudit({ ledger: led, state: gfState(), transcriptExists: yes });
+  assert.ok(r.failures.some((f) => /required gate SPECIFY-coverage/.test(f)));
+});
+
+test("KEY RED-TEAM: a greenfield BUILD state with no certified spec.verifyCmd fails validation", () => {
+  const st = { ...gfState(), phase: "BUILD", spec: { certified: true } };
+  assert.ok(validateState(st).some((e) => /spec\.verifyCmd.*required/.test(e)));
+});
+
+test("KEY RED-TEAM: state.spec.verifyCmd must match the certified verifyCmd in the ledger", () => {
+  const st = { ...gfState(), spec: { certified: true, verifyCmd: "exit 2" } };
+  const r = evaluateAudit({ ledger: gfLedger(), state: st, transcriptExists: yes });
+  assert.ok(r.failures.some((f) => /does not match the certified verifyCmd/.test(f)));
 });

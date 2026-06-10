@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { readLedger } from "./ledger.mjs";
 import { readState } from "./state.mjs";
-import { repairPhaseOrder, greenfieldPhaseOrder } from "./mode.mjs";
+import { repairPhaseOrder, greenfieldPhaseOrder, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
 import { allSprintsDone } from "./sprint.mjs";   // run-honesty: a finished greenfield BUILD has all sprints done
 
 const PRODUCING_REPAIR = { DIAGNOSE: "digest-rendered", VERIFY: "verification", PLAN: "plan-recorded" };
@@ -48,6 +48,17 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     }
   });
 
+  if (greenfield) {
+    for (const e of ledger) {
+      if (e.type !== "phase-advanced") continue;
+      for (const gid of (REQUIRED_GREENFIELD_GATES[e.from] ?? [])) {
+        if (!ledger.some((x) => x.type === "approval" && x.gateId === gid)) {
+          failures.push(`ordering: greenfield phase ${e.from} advanced without an approval for required gate ${gid}`);
+        }
+      }
+    }
+  }
+
   // BUILD's producer/approval is MANDATORY for any greenfield run at or past BUILD — keyed on PHASE, not on
   // gate presence, so a forged state that simply OMITS the BUILD-plan gate cannot slip past this check.
   const phaseIdx = ORDER.indexOf(state.phase);
@@ -56,6 +67,10 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     if (!gateOk) failures.push("ordering: greenfield BUILD requires an approved BUILD-plan gate");
     const apprIdx = ledger.findIndex((x) => x.type === "approval" && x.gateId === "BUILD-plan");
     const planIdx = ledger.findIndex((x) => x.type === "plan-recorded");
+    const cert = [...ledger].reverse().find((x) => x.type === "spec-certified");
+    if (cert && typeof cert.verifyCmd === "string" && state.spec && cert.verifyCmd !== state.spec.verifyCmd) {
+      failures.push("ordering: state.spec.verifyCmd does not match the certified verifyCmd in the ledger");
+    }
     if (planIdx === -1) failures.push("ordering: greenfield BUILD requires plan-recorded in the ledger");
     if (apprIdx === -1) failures.push("ordering: greenfield BUILD requires a BUILD-plan approval entry");
     else if (planIdx !== -1 && planIdx >= apprIdx) failures.push("ordering: BUILD-plan approval is not preceded by plan-recorded");

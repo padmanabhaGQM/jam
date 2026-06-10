@@ -145,14 +145,13 @@ export function validateState(state) {
     }
   }
   if (state.mode === "greenfield" && (state.phase === "BUILD" || state.phase === "FINISH")) {
-    if (state.spec && typeof state.spec.verifyCmd === "string" &&
-        state.plan && typeof state.plan.verifyCmd === "string" &&
-        state.plan.verifyCmd !== state.spec.verifyCmd) {
-      errors.push("greenfield BUILD: plan.verifyCmd must equal the certified spec.verifyCmd (SSOT)");
-    }
-    if (!state.gates || !state.gates["BUILD-plan"]) {
-      errors.push("greenfield BUILD: a BUILD-plan gate is required");
-    }
+    if (!state.spec || state.spec.certified !== true) errors.push("greenfield BUILD: spec must be certified");
+    const sv = state.spec && state.spec.verifyCmd;
+    const pv = state.plan && state.plan.verifyCmd;
+    if (typeof sv !== "string" || sv.length === 0) errors.push("greenfield BUILD: spec.verifyCmd (certified SSOT) is required");
+    if (typeof pv !== "string" || pv.length === 0) errors.push("greenfield BUILD: plan.verifyCmd is required");
+    if (typeof sv === "string" && typeof pv === "string" && sv !== pv) errors.push("greenfield BUILD: plan.verifyCmd must equal the certified spec.verifyCmd (SSOT)");
+    if (!state.gates || !state.gates["BUILD-plan"]) errors.push("greenfield BUILD: a BUILD-plan gate is required");
   }
   return errors;
 }
