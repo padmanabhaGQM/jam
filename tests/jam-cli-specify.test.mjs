@@ -42,7 +42,8 @@ test("CLI drives SPECIFY end-to-end to the BUILD-stub boundary", () => {
   assert.match(jam(root, ["status"]).stdout, /SPECIFY: human\/specified|specified/);
   jam(root, ["approve", "SPECIFY"]);
   const adv = jam(root, ["advance"]);
-  assert.match(adv.stderr + adv.stdout, /BUILD is not yet implemented \(ships in ganjam G4\)/);
+  assert.equal(adv.status, 0);
+  assert.match(jam(root, ["status"]).stdout, /phase BUILD/);
 });
 
 test("CLI: a passing verifyCmd (exit 0) is rejected at certify (red-first)", () => {

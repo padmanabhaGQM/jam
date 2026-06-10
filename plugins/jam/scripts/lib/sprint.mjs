@@ -13,7 +13,12 @@ export function allSprintsDone(state) {
 
 export function startSprint({ runDir: dir, sprintId, now }) {
   const state = readState(dir);
-  if (state.phase !== "IMPLEMENT") throw new Error(`cannot start a sprint: phase is ${state.phase}, not IMPLEMENT`);
+  if (state.phase !== "IMPLEMENT" && !(state.mode === "greenfield" && state.phase === "BUILD")) {
+    throw new Error(`cannot start a sprint: phase is ${state.phase}, not IMPLEMENT (or greenfield BUILD)`);
+  }
+  if (state.mode === "greenfield" && state.phase === "BUILD" && (state.gates["BUILD-plan"]?.status !== "approved")) {
+    throw new Error(`cannot start a sprint: the BUILD-plan gate must be approved first (the human gates the sprint breakdown)`);
+  }
   const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);
   if (!sprint) throw new Error(`unknown sprint: ${sprintId}`);
   if (sprint.status !== "pending") throw new Error(`sprint ${sprintId} is ${sprint.status}, not pending`);

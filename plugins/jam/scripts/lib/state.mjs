@@ -144,6 +144,16 @@ export function validateState(state) {
       errors.push("SPECIFY gate is specified/approved but spec is missing or not certified");
     }
   }
+  if (state.mode === "greenfield" && (state.phase === "BUILD" || state.phase === "FINISH")) {
+    if (state.spec && typeof state.spec.verifyCmd === "string" &&
+        state.plan && typeof state.plan.verifyCmd === "string" &&
+        state.plan.verifyCmd !== state.spec.verifyCmd) {
+      errors.push("greenfield BUILD: plan.verifyCmd must equal the certified spec.verifyCmd (SSOT)");
+    }
+    if (!state.gates || !state.gates["BUILD-plan"]) {
+      errors.push("greenfield BUILD: a BUILD-plan gate is required");
+    }
+  }
   return errors;
 }
 

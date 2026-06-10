@@ -96,11 +96,12 @@ test("KEY RED-TEAM: re-arm — editing the suite after certify resets SPECIFY to
   assert.equal(s.spec.gameability, null);
 });
 
-test("after certify+approval, advancing hits the BUILD stub", () => {
+test("after certify+approval, advancing now reaches BUILD", () => {
   const dir = ready(["WER<5%"]);
   certifyVerifyCmd({ runDir: dir, cwd: dir, now: "t18" });
   recordApproval({ runDir: dir, gateId: "SPECIFY", who: "u", now: "t19" });
-  assert.throws(() => advanceRun({ runDir: dir, now: "t20" }), /BUILD is not yet implemented \(ships in ganjam G4\)/);
+  advanceRun({ runDir: dir, now: "t20" });
+  assert.equal(readState(dir).phase, "BUILD");
 });
 
 test("validateState rejects a SPECIFY gate specified/approved while spec.certified is false", () => {
