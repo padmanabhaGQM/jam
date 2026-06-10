@@ -55,3 +55,31 @@ export function refuteClaim({ runDir: dir, id, now }) {
   appendLedger(dir, { at: nowIso(now), type: "claim-refuted", id });
   return state;
 }
+
+export function convergeGrounding({ runDir: dir, options, openUnknowns, now }) {
+  const state = readState(dir);
+  requireGreenfield(state);
+  if (state.gates["GROUND-scope"].status !== "approved") {
+    throw new Error("convergeGrounding: the GROUND-scope gate must be approved before converging");
+  }
+  const g = state.grounding;
+  if (!g.problem || !g.problem.trim()) throw new Error("convergeGrounding: no problem statement (run sharpenIntent first)");
+  if (!Array.isArray(g.dimensions) || g.dimensions.length === 0) throw new Error("convergeGrounding: no acceptance dimensions");
+  for (const c of g.claims) {
+    if (!["evidenced", "open-unknown"].includes(c.status)) {
+      throw new Error(`convergeGrounding: claim ${c.id} is unsupported (status=${c.status}) — evidence it or drop it`);
+    }
+    if (c.kind === "feasibility" && c.status === "evidenced") {
+      if (!c.evidenceRef || !fs.existsSync(c.evidenceRef)) {
+        throw new Error(`convergeGrounding: feasibility claim ${c.id} has no locatable evidence transcript (not found at ${c.evidenceRef ?? "(none)"})`);
+      }
+    }
+  }
+  if (Array.isArray(options)) g.options = options;
+  if (Array.isArray(openUnknowns)) g.openUnknowns = openUnknowns;
+  g.converged = true;
+  state.gates["GROUND"].status = "grounded";
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "grounding-converged", claims: g.claims.length, openUnknowns: g.openUnknowns.length });
+  return state;
+}
