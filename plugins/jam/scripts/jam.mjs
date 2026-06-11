@@ -568,6 +568,30 @@ async function cmdCodexRun(cwd, positional, flags) {
     }
   }
   const runCwd = turnWt ? path.join(turnWt, path.relative(turnRepoRoot, path.resolve(baseCwd))) : baseCwd;
+  if (turnWt) {
+    const realWt = fs.realpathSync.native(turnWt);
+    let realRun;
+    try { realRun = fs.realpathSync.native(runCwd); } catch { realRun = null; }
+    if (!realRun || (realRun !== realWt && !realRun.startsWith(realWt + path.sep))) {
+      const { dir } = requireActiveRun(cwd);
+      const s = readState(dir);
+      const sp = s.plan.sprints.find((x) => x.id === flags.sprint);
+      if (sp?.turn && sp.turn.status === "open") {
+        sp.turn.status = "discarded";
+        if (sp.turn.worktreePath) {
+          (s.abandonedWorktrees ??= []).push({
+            repoRoot: sp.turn.repoRoot || baseCwd,
+            worktreePath: sp.turn.worktreePath,
+            pid: sp.turn.pid,
+            eventLog: sp.turn.eventLog
+          });
+        }
+        writeState(dir, s);
+        appendLedger(dir, { at: new Date().toISOString(), type: "turn-discarded", sprintId: flags.sprint, token: sp.turn.token, reason: "cwd-escape" });
+      }
+      return fail("--cwd resolves outside the isolated worktree (symlink escape) — refusing to start the turn");
+    }
+  }
   const startInfo = codexStart({ prompt, cwd: runCwd, eventLog, lastMsg });
   if (flags.sprint && isolated) {
     const { dir } = requireActiveRun(cwd);

@@ -122,6 +122,26 @@ test("a superseded OPEN turn never lands; only the live turn reconciles", () => 
   assert.doesNotMatch(app, /from-turn-1/);
 });
 
+test("codex-run --sprint rejects --cwd that resolves through a checked-out symlink", () => {
+  const { root, g, worktreeRoot } = gitRepoAtImplement();
+  fs.writeFileSync(path.join(root, "victim.txt"), "SAFE\n");
+  fs.symlinkSync(".", path.join(root, "back-to-main"), "dir");
+  g("add", "victim.txt", "back-to-main");
+  g("commit", "-qm", "symlink escape fixture");
+  jam(root, ["sprint", "fix-1", "--start"]);
+  const pf = path.join(root, "p.md");
+  fs.writeFileSync(pf, "edit victim.txt");
+  const sid = "jam-fake-cwd-escape";
+  const codexHome = codexHomeWithSession(sid);
+  const run = jam(root, ["codex-run", "--sprint", "fix-1", "--cwd", path.join(root, "back-to-main"), "--prompt-file", pf, "--out-dir", path.join(root, "cx")],
+    { JAM_CODEX_BIN: FAKE, JAM_FAKE_SESSION_ID: sid, CODEX_HOME: codexHome, JAM_FAKE_EDIT: "victim.txt:HIJACK", JAM_WORKTREE_ROOT: worktreeRoot });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr + run.stdout, /symlink escape|resolves outside/);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, "victim.txt"), "utf8"), /HIJACK/);
+  const ledger = fs.readFileSync(path.join(root, "docs", "superpowers", "loop-runs", "r1", "ledger.jsonl"), "utf8");
+  assert.match(ledger, /"type":"turn-discarded"[^\n]*"reason":"cwd-escape"/);
+});
+
 test("non-git project root falls back to in-place with a visible warning + turn-unisolated ledger", () => {
   const root = nonGitAtImplement();
   const sid = "jam-fake-nongit";

@@ -35,6 +35,16 @@ export function largeTrackedBlobs(repoRoot, ref, maxBytes) {
   return big;
 }
 
+function trackedSymlinks(repoRoot, ref) {
+  const out = git(repoRoot, ["ls-tree", "-r", ref]).stdout;
+  const links = [];
+  for (const line of out.split("\n")) {
+    const m = line.match(/^120000 \S+ \S+\t(.+)$/);
+    if (m) links.push(m[1]);
+  }
+  return links;
+}
+
 // Snapshot HEAD + tracked changes + untracked-not-ignored into a dangling commit (no main-tree/index/branch
 // mutation), then create a linked worktree at that commit with large tracked blobs sparse-excluded.
 export function openTurnWorktree({ repoRoot, sprintId, token, runId, maxBlobBytes }) {
@@ -73,8 +83,10 @@ export function openTurnWorktree({ repoRoot, sprintId, token, runId, maxBlobByte
     if (add.code !== 0) throw new Error(`openTurnWorktree: git worktree add failed: ${add.stderr}`);
     try {
       const big = largeTrackedBlobs(repoRoot, baselineRef, max);
+      // Symlinks are excluded fail-safe: a checked-out repo symlink could physically point back into the controller tree.
+      const sparseExcludes = [...big, ...trackedSymlinks(repoRoot, baselineRef)];
       if (git(wt, ["sparse-checkout", "init", "--no-cone"]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout init failed");
-      if (git(wt, ["sparse-checkout", "set", "/*", ...big.map((b) => `!${b}`)]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout set failed");
+      if (git(wt, ["sparse-checkout", "set", "/*", ...sparseExcludes.map((p) => `!${p}`)]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout set failed");
       const co = git(wt, ["checkout"]);
       if (co.code !== 0) throw new Error(`openTurnWorktree: worktree checkout failed: ${co.stderr}`);
       const headAtOpen = git(repoRoot, ["rev-parse", "HEAD"]).stdout.trim();   // detect a deliberate shared-ref move at reconcile

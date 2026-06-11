@@ -108,6 +108,23 @@ test("largeTrackedBlobs flags tracked files over the threshold; sparse worktree 
   assert.match(fs.readFileSync(path.join(root, "code.txt"), "utf8"), /turn/);      // code change applied
 });
 
+test("openTurnWorktree sparse-excludes committed symlinks and reconcile preserves them", () => {
+  const { root, g } = gitRepo();
+  fs.symlinkSync(root, path.join(root, "back"), "dir");
+  g("add", "-A");
+  g("commit", "-qm", "symlink");
+  const { worktreePath, baselineRef } = openTurnWorktree({ repoRoot: root, sprintId: "s1", token: "s1#1" });
+  assert.equal(fs.existsSync(path.join(worktreePath, "back")), false);
+  fs.writeFileSync(path.join(worktreePath, "code.txt"), "v1\nturn\n");
+  const gw = (...a) => spawnSync("git", ["-C", worktreePath, ...a], { encoding: "utf8" });
+  gw("add", "-A");
+  assert.doesNotMatch(gw("diff", "--cached", "--name-status", baselineRef).stdout, /^D\s+back$/m);
+  const r = reconcileTurnWorktree({ repoRoot: root, worktreePath, baselineRef });
+  assert.equal(r.applied, true);
+  assert.equal(fs.lstatSync(path.join(root, "back")).isSymbolicLink(), true);
+  assert.match(fs.readFileSync(path.join(root, "code.txt"), "utf8"), /turn/);
+});
+
 test("reconcile NEVER lands jam internals (loop-runs/ACTIVE) even when tracked — closes the ACTIVE-clobber vector", () => {
   const { root, g } = gitRepo();
   fs.mkdirSync(path.join(root, "docs", "superpowers", "loop-runs"), { recursive: true });
