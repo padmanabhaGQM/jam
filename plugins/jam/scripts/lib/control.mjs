@@ -4,6 +4,7 @@ import path from "node:path";
 import { readState, writeState, getGate } from "./state.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { activePointerPath } from "./paths.mjs";
+import { phaseOrderFor } from "./mode.mjs";
 
 function nowIso(now) {
   return now ?? new Date().toISOString();
@@ -41,6 +42,34 @@ export function rejectGate({ runDir: dir, gateId, reason, now }) {
   g.approvedAt = null;
   writeState(dir, state);
   appendLedger(dir, { at: nowIso(now), type: "gate-rejected", gateId, reason: String(reason) });
+  return state;
+}
+
+export function rewindPhase({ runDir: dir, toPhase, confirm, now }) {
+  const state = readState(dir);
+  const order = phaseOrderFor(state.mode);
+  const cur = order.indexOf(state.phase), tgt = order.indexOf(toPhase);
+  if (tgt === -1) throw new Error(`rewindPhase: ${toPhase} is not a phase in mode ${state.mode ?? "repair"}`);
+  if (tgt >= cur) throw new Error(`rewindPhase: target must be earlier than the current phase (${state.phase})`);
+  if (confirm !== toPhase) throw new Error("rewindPhase: typed --confirm must equal the target phase (rewind invalidates approvals)");
+  const from = state.phase;
+  state.phase = toPhase;
+  for (const id of Object.keys(state.gates)) {
+    const phaseOfGate = order.find((p) => id === p || id.startsWith(p + "-"));
+    if (!phaseOfGate) continue;
+    const gi = order.indexOf(phaseOfGate);
+    if (gi > tgt) {
+      delete state.gates[id];
+    } else if (gi === tgt) {
+      state.gates[id].status = "pending";
+      state.gates[id].mode = "human";
+      state.gates[id].approvedBy = null;
+      state.gates[id].approvedAt = null;
+      delete state.gates[id].rejectedReason;
+    }
+  }
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "phase-rewound", from, to: toPhase });
   return state;
 }
 

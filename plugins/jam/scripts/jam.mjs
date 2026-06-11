@@ -17,7 +17,7 @@ import { isGitRepo, openTurnWorktree, reconcileTurnWorktree, discardTurnWorktree
 import { readState, writeState } from "./lib/state.mjs";
 import { appendLedger } from "./lib/ledger.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
-import { addSteering, cancelRun, recordVerification, rejectGate } from "./lib/control.mjs";
+import { addSteering, cancelRun, recordVerification, rejectGate, rewindPhase } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { sharpenIntent, addClaim, refuteClaim, convergeGrounding } from "./lib/grounding.mjs";
 import { setShortlist, recordDecision, ruleTiebreak, convergeDecision } from "./lib/convergence.mjs";
@@ -235,6 +235,18 @@ function cmdReject(cwd, positional, flags) {
   } else {
     process.stdout.write(`gate ${gateId} rejected — re-produce its artifact, then approve\n`);
   }
+}
+
+function cmdRewind(cwd, positional, flags) {
+  const toPhase = positional[0];
+  if (!toPhase || !flags.confirm) return fail("usage: jam rewind <phase> --confirm <phase>   (rewind invalidates approvals)");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    rewindPhase({ runDir: dir, toPhase, confirm: flags.confirm });
+  } catch (e) {
+    return fail(e.message);
+  }
+  process.stdout.write(`rewound to ${toPhase} — later-phase gates re-armed; re-produce artifacts and re-approve. (The working tree is NOT rolled back — that is git's job.)\n`);
 }
 
 function cmdAddGate(cwd, positional, flags) {
@@ -858,6 +870,8 @@ async function main() {
       return cmdApprove(cwd, positional);
     case "reject":
       return cmdReject(cwd, positional, flags);
+    case "rewind":
+      return cmdRewind(cwd, positional, flags);
     case "add-gate":
       return cmdAddGate(cwd, positional, flags);
     case "evidence":

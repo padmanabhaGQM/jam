@@ -170,6 +170,7 @@ test("auditRun reads a real run dir: PASS with a real transcript, FAIL without",
   const tp = path.join(root, "transcript.jsonl");
   fs.writeFileSync(tp, "{}\n");
   const s = readState(dir);
+  s.phase = "IMPLEMENT";
   s.plan = { verifyCmd: "true", sprints: [{ id: "fix-1", title: "t", status: "done", provenance: "planned", codexSessions: [{ sessionId: "s", transcriptPath: tp, at: "t" }] }] };
   writeState(dir, s);
   for (const e of goodLedger().slice(1)) appendLedger(dir, { at: "t", ...e });

@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { createRun, recordDigest, recordApproval } from "../plugins/jam/scripts/lib/actions.mjs";
 import { proposeAction, ratifyAction } from "../plugins/jam/scripts/lib/action.mjs";
-import { rejectGate } from "../plugins/jam/scripts/lib/control.mjs";
+import { rejectGate, rewindPhase } from "../plugins/jam/scripts/lib/control.mjs";
 import { readState, writeState } from "../plugins/jam/scripts/lib/state.mjs";
 import { evaluateGate } from "../plugins/jam/scripts/lib/gate.mjs";
 import { evaluateAudit } from "../plugins/jam/scripts/lib/audit.mjs";
@@ -82,8 +82,23 @@ test("open rejection blocks later advancement; re-render resolves; denied action
   assert.doesNotThrow(() => advanceRun({ runDir: deniedDir, now: "d5" }));
 });
 
-// TASK-4: enable the full reject -> rewind -> re-produce -> approve -> re-advance loop
-// when rewindPhase lands in Task 4.
+test("reject an EARLIER phase's gate → advance blocked → rewind → re-produce → approve → re-advance", () => {
+  const dir = run();
+  recordDigest({ runDir: dir, gateId: "DIAGNOSE", digest, now: "t1" });
+  recordApproval({ runDir: dir, gateId: "DIAGNOSE", who: "u", now: "t2" });
+  advanceRun({ runDir: dir, now: "t3" });
+  rejectGate({ runDir: dir, gateId: "DIAGNOSE", reason: "redo the diagnosis", now: "t4" });
+  const s1 = readState(dir);
+  s1.gates.VERIFY.status = "verified";
+  writeState(dir, s1);
+  recordApproval({ runDir: dir, gateId: "VERIFY", who: "u", now: "t5" });
+  assert.throws(() => advanceRun({ runDir: dir, now: "t6" }), /rejected/);
+  rewindPhase({ runDir: dir, toPhase: "DIAGNOSE", confirm: "DIAGNOSE", now: "t7" });
+  recordDigest({ runDir: dir, gateId: "DIAGNOSE", digest, now: "t8" });
+  recordApproval({ runDir: dir, gateId: "DIAGNOSE", who: "u", now: "t9" });
+  advanceRun({ runDir: dir, now: "t10" });
+  assert.equal(readState(dir).phase, "VERIFY");
+});
 
 test("audit rejects approval after gate-rejected without re-production and blocks FINISH with open rejection", () => {
   const forged = [
@@ -122,5 +137,8 @@ test("audit rejects approval after gate-rejected without re-production and block
     },
     transcriptExists: () => true,
   });
-  assert.ok(!finishDenied.failures.some((f) => /action-drop-1 is rejected/));
+  assert.ok(
+    !finishDenied.failures.some((f) => /action-drop-1 is rejected/.test(f)),
+    finishDenied.failures.join("; ")
+  );
 });

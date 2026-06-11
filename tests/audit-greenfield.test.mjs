@@ -12,8 +12,8 @@ function gfLedger() {
   return [
     { type: "intent-sharpened" },
     { type: "grounding-converged" }, { type: "approval", gateId: "GROUND-scope" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
-    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
-    { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
+    { type: "shortlist-set" }, { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
+    { type: "coverage-set" }, { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
     { type: "plan-recorded", sprints: 1, sprintIds: ["b1"] }, { type: "approval", gateId: "BUILD-plan" },
     { type: "sprint-started", sprintId: "b1" },
     { type: "codex-bound", sprintId: "b1" },
@@ -83,8 +83,8 @@ test("KEY RED-TEAM: a greenfield ledger that advances BUILD->FINISH BEFORE recor
   // plan-recorded + BUILD-plan approval are back-filled AFTER the BUILD->FINISH advance.
   const led = [
     { type: "grounding-converged" }, { type: "approval", gateId: "GROUND-scope" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
-    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
-    { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
+    { type: "shortlist-set" }, { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
+    { type: "coverage-set" }, { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" }, { type: "phase-advanced", from: "SPECIFY", to: "BUILD" },
     { type: "phase-advanced", from: "BUILD", to: "FINISH" },   // advanced BEFORE the plan was recorded
     { type: "plan-recorded" }, { type: "approval", gateId: "BUILD-plan" },
   ];
@@ -106,8 +106,8 @@ test("KEY RED-TEAM: a greenfield BUILD run missing the SPECIFY->BUILD advance (s
   // complete-prefix check catches it.
   const led = [
     { type: "grounding-converged" }, { type: "approval", gateId: "GROUND-scope" }, { type: "approval", gateId: "GROUND" }, { type: "phase-advanced", from: "GROUND", to: "CONVERGE" },
-    { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
-    { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" },   // NO phase-advanced SPECIFY->BUILD
+    { type: "shortlist-set" }, { type: "convergence-decided" }, { type: "approval", gateId: "CONVERGE-shortlist" }, { type: "approval", gateId: "CONVERGE" }, { type: "phase-advanced", from: "CONVERGE", to: "SPECIFY" },
+    { type: "coverage-set" }, { type: "spec-certified", verifyCmd: "exit 1" }, { type: "approval", gateId: "SPECIFY-coverage" }, { type: "approval", gateId: "SPECIFY" },   // NO phase-advanced SPECIFY->BUILD
     { type: "plan-recorded" }, { type: "approval", gateId: "BUILD-plan" },
   ];
   const r = evaluateAudit({ ledger: led, state: { ...gfState(), phase: "BUILD" }, transcriptExists: yes });
