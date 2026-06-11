@@ -1,9 +1,13 @@
 ---
-description: Roll the run back to a prior phase or gate
-argument-hint: "<phase|gate-id>"
+description: Move a run back to an earlier phase
+argument-hint: "<phase> --confirm <phase>"
 allowed-tools: Bash(node:*)
 ---
 
-> **Scaffold — not yet implemented.** See design spec §5.
+Run `jam rewind <phase> --confirm <phase>`.
 
-Rewind the run to `$ARGUMENTS`. Resets gate statuses at/after that point to `pending`, preserves the ledger (rewinds are recorded, not erased), and re-enters from there. Use when trajectory went wrong and a redirection isn't enough.
+Rewind moves the run backward. It re-arms all gates of the target and later phases, and it requires typed confirmation because prior approvals for that portion of the run are invalidated.
+
+History is preserved in the ledger; rewinds are recorded, not erased. The audit requires post-rewind artifacts for any re-advance.
+
+Rewind does not touch the working tree. Code rollback is git's job.

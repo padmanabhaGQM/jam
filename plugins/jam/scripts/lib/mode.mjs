@@ -12,9 +12,7 @@ export const REQUIRED_GREENFIELD_GATES = {
   BUILD: ["BUILD-plan"],
 };
 
-// Greenfield phases that are defined but not yet implemented (ship in later ganjam slices).
 export const GREENFIELD_STUB_PHASES = new Set();
-export const GREENFIELD_STUB_SLICE = {};
 
 // repair is the default for any run without an explicit greenfield mode (incl. the legacy ALIGN flow).
 export function phaseOrderFor(mode) {

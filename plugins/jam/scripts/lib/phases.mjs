@@ -5,7 +5,7 @@ import { appendLedger } from "./ledger.mjs";
 import { allSprintsDone } from "./sprint.mjs";
 import { auditRun } from "./audit.mjs";
 import { runVerification } from "./evidence.mjs";
-import { phaseOrderFor, GREENFIELD_STUB_PHASES, GREENFIELD_STUB_SLICE, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
+import { phaseOrderFor, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
 
 export { repairPhaseOrder } from "./mode.mjs";
 
@@ -47,9 +47,6 @@ export function advancePhase(state, { verified = false } = {}) {
   } else if (state.phase !== "IMPLEMENT") {
     const { allowed, reason } = evaluateGate(state, state.phase);
     if (!allowed) throw new Error(`cannot advance from ${state.phase}: ${reason}`);
-  }
-  if (state.mode === "greenfield" && GREENFIELD_STUB_PHASES.has(next)) {
-    throw new Error(`phase ${next} is not yet implemented (ships in ganjam ${GREENFIELD_STUB_SLICE[next]})`);
   }
   state.phase = next;
   if (state.mode === "greenfield") {

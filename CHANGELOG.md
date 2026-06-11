@@ -5,6 +5,14 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.19.0 — Production P1: the control surface is complete
+- **`jam doctor`** — environment preflight (Node, git, Codex CLI + auth, repo state, version coherence) with an actionable fix per failing check; guided errors point first-run failures at it.
+- **`jam reject <gate> --reason`** — refuse a gate with a recorded reason; approval over a rejection is structurally impossible until the artifact is re-produced (audited).
+- **`jam resume`** — read-only rehydration with a single next-action hint.
+- **`jam rewind <phase> --confirm <phase>`** — supervised backward rollback; later-phase gates re-arm; the run-honesty audit is rewind-aware (re-advances require post-rewind artifacts).
+- **`jam dial <gate> --mode`** — fail-safe gate strictness (tighten freely; loosen with typed confirm; ratification/sprint gates never dialable).
+- No scaffold ("not yet implemented") surface remains.
+
 ## 0.18.0 — jam report (observability)
 - `jam report [<runId>] [--json]` — a faithful, strictly read-only summary of a run from its ledger + state: wall time, phase dwell, review rounds + rounds-to-zero, sprint durations + authorship/evidence, turn-isolation stats, final-verification, audit. `jam report --all` lists every run one line each (corrupt run dirs tolerated).
 - `jam review-round --phase VERIFY|SLICE --round <n> --blockers <k>` — append-only, audit-inert ledger enrichment so future runs carry round-level review data (historical runs render an explicit "round-level review data not recorded" note instead of invented numbers).

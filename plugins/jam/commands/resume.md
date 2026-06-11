@@ -1,9 +1,11 @@
 ---
 description: Rehydrate a jam run after a restart or compaction
-argument-hint: "<run-id>"
-allowed-tools: Bash(node:*), Read
+argument-hint: ""
+allowed-tools: Bash(node:*)
 ---
 
-> **Scaffold — not yet implemented.** See design spec §9.
+Run `jam resume`.
 
-Rehydrate run `$ARGUMENTS` from disk: load `state.json` (phase, gates, coverage, directives, Codex session ids) and report where it stands so work continues exactly where it left off. Global context lives on disk, not in the model's memory.
+Resume is read-only. It prints the run status plus exactly one next action: reconcile an open turn, verify, mark a sprint done, approve a gate, produce the missing artifact, or advance the phase.
+
+Use it after restarting Claude Code, returning to a machine, or recovering after compaction. Global context lives on disk, not in the model's memory.

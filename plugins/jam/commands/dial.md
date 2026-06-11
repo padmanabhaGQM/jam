@@ -1,9 +1,13 @@
 ---
-description: Adjust how strict a gate is (human | show-and-proceed | auto)
-argument-hint: "<gate-id> <human|show-and-proceed|auto>"
+description: Adjust how strict a gate is
+argument-hint: "<gateId> --mode <human|show-and-proceed> [--confirm <gateId>]"
 allowed-tools: Bash(node:*)
 ---
 
-> **Scaffold — not yet implemented.** See design spec §8.
+Run `jam dial <gateId> --mode <human|show-and-proceed> [--confirm <gateId>]`.
 
-Set the mode for gate `$ARGUMENTS`. Defaults are distrust-heavy (ALIGN/PLAN/sprint-review = `human`; evidence = `auto`). Loosen specific gates as trust in the *structure* grows — never as trust in the models grows. Recorded in `state.json` + ledger.
+Tightening a gate to `human` is free. Loosening to `show-and-proceed` requires the typed confirm because it delegates a human stop into a recorded, auditable proceed signal.
+
+Ratification gates for irreversible actions and sprint evidence gates are never dialable. Nothing can be dialed to `auto`; automatic passage is earned only by the gate's evidence mechanism.
+
+Loosen as trust in the structure grows, never as trust in the models grows. Every dial change is recorded in state and the ledger.
