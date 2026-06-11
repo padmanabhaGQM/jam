@@ -54,6 +54,18 @@ test("jam review-round appends an inert ledger entry; validation refuses bad inp
   assert.notEqual(jam(root, ["review-round", "--phase", "VERIFY", "--round", "-1", "--blockers", "0"]).status, 0);
   assert.notEqual(jam(root, ["review-round", "--phase", "VERIFY", "--round", "3", "--blockers", "-2"]).status, 0);
   assert.notEqual(jam(root, ["review-round", "--phase", "VERIFY", "--round", "3", "--blockers", "0", "--notes", "x".repeat(501)]).status, 0);
+  for (const [label, args] of [
+    ["empty blockers", ["review-round", "--phase", "VERIFY", "--round", "3", "--blockers", ""]],
+    ["space-prefixed blockers", ["review-round", "--phase", "VERIFY", "--round", "3", "--blockers", " 2"]],
+    ["hex blockers", ["review-round", "--phase", "VERIFY", "--round", "3", "--blockers", "0x2"]],
+    ["exponent blockers", ["review-round", "--phase", "VERIFY", "--round", "3", "--blockers", "1e2"]],
+    ["zero round", ["review-round", "--phase", "VERIFY", "--round", "0", "--blockers", "0"]],
+    ["fractional round", ["review-round", "--phase", "VERIFY", "--round", "2.5", "--blockers", "0"]],
+    ["bare blockers", ["review-round", "--phase", "VERIFY", "--round", "3", "--blockers"]],
+    ["omitted blockers", ["review-round", "--phase", "VERIFY", "--round", "3"]],
+  ]) {
+    assert.notEqual(jam(root, args).status, 0, label);
+  }
   const ledger = fs.readFileSync(path.join(root, "docs", "superpowers", "loop-runs", "r1", "ledger.jsonl"), "utf8");
   assert.equal((ledger.match(/"type":"review-round"/g) ?? []).length, 2);
   const rep = jam(root, ["report"]);

@@ -772,10 +772,11 @@ function cmdReport(cwd, positional, flags) {
   process.stdout.write("json" in flags ? JSON.stringify(rep, null, 2) + "\n" : renderReport(rep));
 }
 function cmdReviewRound(cwd, positional, flags) {
-  const phase = flags.phase, round = Number(flags.round), blockers = Number(flags.blockers);
+  const phase = flags.phase, rawRound = flags.round, rawBlockers = flags.blockers;
   if (!["VERIFY", "SLICE"].includes(phase)) return fail("usage: jam review-round --phase VERIFY|SLICE --round <n> --blockers <k> [--notes <text>]");
-  if (!Number.isInteger(round) || round < 1) return fail("review-round: --round must be a positive integer");
-  if (!Number.isInteger(blockers) || blockers < 0) return fail("review-round: --blockers must be a non-negative integer");
+  if (!/^[1-9]\d*$/.test(String(rawRound))) return fail("review-round: --round must be a positive integer");
+  if (!/^(0|[1-9]\d*)$/.test(String(rawBlockers))) return fail("review-round: --blockers must be a non-negative integer");
+  const round = Number(rawRound), blockers = Number(rawBlockers);
   if (flags.notes && String(flags.notes).length > 500) return fail("review-round: --notes must be ≤ 500 characters");   // refuse, never silently truncate
   const notes = flags.notes ? String(flags.notes) : undefined;
   // APPEND-ONLY: resolve the active run WITHOUT requireActiveRun (its abandoned-worktree sweep can write state.json).
