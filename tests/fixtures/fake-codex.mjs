@@ -5,6 +5,12 @@ import fs from "node:fs";
 import process from "node:process";
 
 const argv = process.argv.slice(2);
+const cdIdx = argv.indexOf("--cd");
+if (cdIdx >= 0 && argv[cdIdx + 1]) { try { process.chdir(argv[cdIdx + 1]); } catch {} }
+if (process.env.JAM_FAKE_EDIT) {
+  const [rel, ...rest] = process.env.JAM_FAKE_EDIT.split(":");
+  try { fs.appendFileSync(rel, rest.join(":") + "\n"); } catch {}
+}
 const isResume = argv[0] === "exec" && argv[1] === "resume";
 const oIdx = argv.indexOf("-o");
 const lastMsg = oIdx >= 0 ? argv[oIdx + 1] : null;

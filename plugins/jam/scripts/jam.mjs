@@ -11,8 +11,10 @@ import { spawnSync } from "node:child_process";
 
 import { readActiveRunId, runDir } from "./lib/paths.mjs";
 import { codexStart, codexResume, codexWait } from "./lib/codex/exec.mjs";
-import { classifyTurn, sessionIdFromEventLog, locateTranscript } from "./lib/codex/session.mjs";
-import { readState } from "./lib/state.mjs";
+import { classifyTurn, sessionIdFromEventLog, locateTranscript, hasTurnCompleted } from "./lib/codex/session.mjs";
+import { isGitRepo, openTurnWorktree, reconcileTurnWorktree, discardTurnWorktree, gcWorktrees } from "./lib/worktree.mjs";
+import { readState, writeState } from "./lib/state.mjs";
+import { appendLedger } from "./lib/ledger.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
 import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
@@ -22,7 +24,7 @@ import { setCoverage, recordRedProof, recordGameability, certifyVerifyCmd } from
 import { recordBuildPlan } from "./lib/build.mjs";
 import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
-import { startSprint, verifySprint, finishSprint, bindCodexSession } from "./lib/sprint.mjs";
+import { startSprint, verifySprint, finishSprint, bindCodexSession, openTurn } from "./lib/sprint.mjs";
 import { auditRun } from "./lib/audit.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
 
@@ -51,10 +53,44 @@ function parseFlags(args) {
   return { positional, flags };
 }
 
+function pidAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e && e.code === "EPERM";
+  }
+}
+
+function sweepAbandonedWorktrees(dir) {
+  let s;
+  try { s = readState(dir); } catch { return; }
+  const left = [];
+  for (const w of s.abandonedWorktrees ?? []) {
+    const done = !!(w.eventLog && hasTurnCompleted(w.eventLog));
+    if (!done && pidAlive(w.pid)) { left.push(w); continue; }
+    if (!w.repoRoot || !w.worktreePath) continue;
+    const r = discardTurnWorktree({ repoRoot: w.repoRoot, worktreePath: w.worktreePath });
+    if (!r.removed && fs.existsSync(w.worktreePath)) left.push(w);
+  }
+  if ((s.abandonedWorktrees ?? []).length !== left.length) {
+    s.abandonedWorktrees = left;
+    writeState(dir, s);
+  }
+  try {
+    for (const repoRoot of new Set((s.abandonedWorktrees ?? []).map((w) => w.repoRoot).filter(Boolean))) {
+      gcWorktrees({ repoRoot });
+    }
+  } catch {}
+}
+
 function requireActiveRun(cwd) {
   const runId = readActiveRunId(cwd);
   if (!runId) fail("no active jam run in this project (run `jam start <topic>` first)");
-  return { runId, dir: runDir(cwd, runId) };
+  const dir = runDir(cwd, runId);
+  try { sweepAbandonedWorktrees(dir); } catch {}
+  return { runId, dir };
 }
 
 function genRunId() {
@@ -411,26 +447,201 @@ function maybeBindSprint({ cwd, flags, status, sessionId }) {
   process.stdout.write(`bound session ${sessionId} to sprint ${flags.sprint} (transcript: ${stored ?? "none — rollout did not content-match the session"})\n`);
 }
 
+const RECONCILE_EXCLUDES = ["--", ".", ":(exclude).jam/**", ":(exclude)docs/superpowers/loop-runs/**"];
+
+function gitText(repoRoot, args, opts = {}) {
+  const r = spawnSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", ...opts });
+  return { code: r.status === null ? -1 : r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+}
+
+// CLI reconcile uses a patch file instead of piping patch text to `git apply`; in sandboxed
+// subprocesses the stdin path can block, while file-based apply is deterministic.
+function reconcileTurnWorktreeForCli({ repoRoot, worktreePath, baselineRef, headAtOpen }) {
+  if (!worktreePath || !baselineRef || !fs.existsSync(worktreePath)) return { applied: false, error: "missing worktree or baseline" };
+  if (headAtOpen && gitText(repoRoot, ["rev-parse", "HEAD"]).stdout.trim() !== headAtOpen) return { applied: false, headMoved: true };
+  if (gitText(worktreePath, ["add", "-A"]).code !== 0) return { applied: false, error: "git add failed in worktree" };
+  const nd = gitText(worktreePath, ["diff", "--cached", "--name-only", baselineRef, ...RECONCILE_EXCLUDES]);
+  if (nd.code !== 0) return { applied: false, error: "git diff (names) failed" };
+  const names = nd.stdout.split("\n").filter(Boolean);
+  if (names.length === 0) return { applied: false, empty: true };
+  for (const p of names) {
+    const bp = gitText(repoRoot, ["rev-parse", `${baselineRef}:${p}`]);
+    const baseId = bp.code === 0 ? bp.stdout.trim() : null;
+    const abs = path.join(repoRoot, p);
+    const mainId = fs.existsSync(abs) ? gitText(repoRoot, ["hash-object", abs]).stdout.trim() : null;
+    if (baseId !== mainId) return { applied: false, drift: true, path: p };
+  }
+  const pd = gitText(worktreePath, ["diff", "--cached", "--binary", baselineRef, ...RECONCILE_EXCLUDES]);
+  if (pd.code !== 0) return { applied: false, error: "git diff (patch) failed" };
+  const patchFile = path.join(os.tmpdir(), `jam-reconcile-${process.pid}-${Math.random().toString(36).slice(2)}.patch`);
+  try {
+    fs.writeFileSync(patchFile, pd.stdout);
+    const check = gitText(repoRoot, ["apply", "--check", patchFile]);
+    if (check.code !== 0) return { applied: false, drift: true, stderr: check.stderr ?? "" };
+    const apply = gitText(repoRoot, ["apply", patchFile]);
+    if (apply.code !== 0) return { applied: false, error: apply.stderr ?? "" };
+    return { applied: true };
+  } finally {
+    try { fs.rmSync(patchFile, { force: true }); } catch {}
+  }
+}
+
 async function cmdCodexRun(cwd, positional, flags) {
-  if (!flags["prompt-file"]) return fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>]");
+  if (!flags["prompt-file"]) return fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>] [--sprint <id>]");
   let prompt;
   try { prompt = fs.readFileSync(flags["prompt-file"], "utf8"); } catch (e) { return fail(`cannot read prompt file: ${e.message}`); }
-  const outDir = flags["out-dir"] || fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
+  let outDir = flags["out-dir"] ? path.resolve(cwd, flags["out-dir"]) : fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
+  let turnWt = null;
+  let baselineRef = null;
+  let isolated = false;
+  let turnRepoRoot = null;
+  const baseCwd = flags.cwd || cwd;
+
+  if (flags.sprint && isGitRepo(baseCwd)) {
+    const { dir, runId } = requireActiveRun(cwd);
+    const pre = readState(dir);
+    const preSp = pre.plan?.sprints?.find((x) => x.id === flags.sprint);
+    if (preSp?.turn && preSp.turn.status === "open") {
+      preSp.turn.status = "discarded";
+      (pre.abandonedWorktrees ??= []).push({
+        repoRoot: preSp.turn.repoRoot || baseCwd,
+        worktreePath: preSp.turn.worktreePath,
+        pid: preSp.turn.pid,
+        eventLog: preSp.turn.eventLog
+      });
+      writeState(dir, pre);
+      appendLedger(dir, { at: new Date().toISOString(), type: "turn-discarded", sprintId: flags.sprint, token: preSp.turn.token, reason: "superseded" });
+    }
+    const seqState = openTurn({ runDir: dir, sprintId: flags.sprint });
+    try {
+      const wt = openTurnWorktree({ repoRoot: baseCwd, sprintId: flags.sprint, token: seqState.token, runId });
+      turnWt = wt.worktreePath;
+      baselineRef = wt.baselineRef;
+      isolated = true;
+      turnRepoRoot = wt.repoRoot;
+      if (outDir === turnRepoRoot || outDir.startsWith(turnRepoRoot + path.sep)) {
+        outDir = fs.mkdtempSync(path.join(os.tmpdir(), "jam-turn-"));
+        process.stdout.write("(relocated turn I/O out of the repo working tree)\n");
+      }
+      const s = readState(dir);
+      const sp = s.plan.sprints.find((x) => x.id === flags.sprint);
+      sp.turn.worktreePath = turnWt;
+      sp.turn.baselineRef = baselineRef;
+      sp.turn.repoRoot = turnRepoRoot;
+      sp.turn.headAtOpen = wt.headAtOpen;
+      writeState(dir, s);
+    } catch (e) {
+      const s = readState(dir);
+      const sp = s.plan.sprints.find((x) => x.id === flags.sprint);
+      if (sp?.turn && sp.turn.status === "open") {
+        sp.turn.status = "discarded";
+        if (sp.turn.worktreePath) {
+          (s.abandonedWorktrees ??= []).push({
+            repoRoot: sp.turn.repoRoot || baseCwd,
+            worktreePath: sp.turn.worktreePath,
+            pid: sp.turn.pid,
+            eventLog: sp.turn.eventLog
+          });
+        }
+        writeState(dir, s);
+        appendLedger(dir, { at: new Date().toISOString(), type: "turn-discarded", sprintId: flags.sprint, token: sp.turn.token, reason: "worktree-open-failed" });
+      }
+      return fail(`could not open turn worktree: ${e.message}`);
+    }
+  } else if (flags.sprint) {
+    const { dir } = requireActiveRun(cwd);
+    openTurn({ runDir: dir, sprintId: flags.sprint, isolated: false });
+    appendLedger(dir, { at: new Date().toISOString(), type: "turn-unisolated", sprintId: flags.sprint });
+    process.stdout.write("turn isolation OFF (not a git repo) - Codex will edit the working tree in place\n");
+  }
+
   fs.mkdirSync(outDir, { recursive: true });
   const eventLog = path.join(outDir, "events.jsonl");
   const lastMsg = path.join(outDir, "last.md");
-  codexStart({ prompt, cwd: flags.cwd || cwd, eventLog, lastMsg });
+  if (flags.sprint && isolated) {
+    const { dir } = requireActiveRun(cwd);
+    const s = readState(dir);
+    const sp = s.plan.sprints.find((x) => x.id === flags.sprint);
+    if (sp?.turn) {
+      sp.turn.eventLog = eventLog;
+      writeState(dir, s);
+    }
+  }
+  const runCwd = turnWt ? path.join(turnWt, path.relative(turnRepoRoot, path.resolve(baseCwd))) : baseCwd;
+  const startInfo = codexStart({ prompt, cwd: runCwd, eventLog, lastMsg });
+  if (flags.sprint && isolated) {
+    const { dir } = requireActiveRun(cwd);
+    const s = readState(dir);
+    const sp = s.plan.sprints.find((x) => x.id === flags.sprint);
+    if (sp?.turn) {
+      sp.turn.pid = startInfo.pid;
+      writeState(dir, s);
+    }
+  }
   const timeoutMs = Number(flags.timeout) || 120000;
   const r = await codexWait({ eventLog, lastMsg, timeoutMs });
   process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? "(none)"}\nout-dir: ${outDir}\n`);
   if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
+  else if (flags.sprint && isolated) process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). When it completes, run: jam reconcile --sprint ${flags.sprint}\n`);
   else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). Resume with: jam codex-resume ${r.sessionId ?? "<id>"} --prompt-file <reply>\n`);
   maybeBindSprint({ cwd, flags, status: r.status, sessionId: r.sessionId });
+  if (flags.sprint && isolated && r.status === "completed") {
+    reconcileActiveTurn(cwd, flags.sprint);
+  }
+}
+
+function reconcileActiveTurn(cwd, sprintId) {
+  const { dir } = requireActiveRun(cwd);
+  let state = readState(dir);
+  let sprint = state.plan?.sprints?.find((s) => s.id === sprintId);
+  if (!sprint || !sprint.turn) return fail(`no turn to reconcile for sprint ${sprintId}`);
+  let t = sprint.turn;
+  if (t.status !== "open") {
+    process.stdout.write(`turn ${t.token} already ${t.status}\n`);
+    return;
+  }
+  const repoRoot = t.repoRoot || cwd;
+  if (t.token !== `${sprintId}#${sprint.turnSeq}`) {
+    t.status = "discarded";
+    (state.abandonedWorktrees ??= []).push({ repoRoot, worktreePath: t.worktreePath, pid: t.pid, eventLog: t.eventLog });
+    writeState(dir, state);
+    appendLedger(dir, { at: new Date().toISOString(), type: "turn-discarded", sprintId, token: t.token, reason: "superseded" });
+    return fail(`turn ${t.token} was superseded - not reconciled, main tree untouched`);
+  }
+  if (!t.eventLog || !hasTurnCompleted(t.eventLog)) return fail(`turn ${t.token} is still running - not reconcilable yet (re-run when complete)`);
+  if (!t.sessionId) {
+    const sid = sessionIdFromEventLog(t.eventLog);
+    if (!sid) return fail(`turn ${t.token}: cannot resolve a Codex session id from the event log`);
+    bindCodexSession({ runDir: dir, sprintId, sessionId: sid });
+    state = readState(dir);
+    sprint = state.plan.sprints.find((s) => s.id === sprintId);
+    t = sprint.turn;
+    if (!t.sessionId) return fail(`turn ${t.token}: bound session has no locatable/matching transcript - refusing`);
+  }
+  const res = reconcileTurnWorktreeForCli({ repoRoot, worktreePath: t.worktreePath, baselineRef: t.baselineRef, headAtOpen: t.headAtOpen });
+  if (res.headMoved) return fail("reconcile aborted: controller HEAD moved during the turn - a turn may have moved the branch via shared refs; inspect and reset before retrying");
+  if (res.drift) return fail("reconcile aborted: main tree drifted from the turn baseline");
+  if (res.error) return fail(`reconcile failed: ${res.error}`);
+  if (!res.applied && !res.empty) return fail("reconcile failed to apply the turn diff");
+  const dr = discardTurnWorktree({ repoRoot, worktreePath: t.worktreePath });
+  if (!dr.removed) (state.abandonedWorktrees ??= []).push({ repoRoot, worktreePath: t.worktreePath, pid: t.pid, eventLog: t.eventLog });
+  t.status = "reconciled";
+  writeState(dir, state);
+  appendLedger(dir, { at: new Date().toISOString(), type: "turn-reconciled", sprintId, token: t.token, sessionId: t.sessionId });
+  process.stdout.write(`reconciled turn ${t.token} into the working tree\n`);
+}
+
+function cmdReconcile(cwd, positional, flags) {
+  if (!flags.sprint) return fail("usage: jam reconcile --sprint <id>");
+  reconcileActiveTurn(cwd, flags.sprint);
 }
 
 async function cmdCodexResume(cwd, positional, flags) {
   const sessionId = positional[0];
   if (!sessionId || !flags["prompt-file"]) return fail("usage: jam codex-resume <sessionId> --prompt-file <f> [--timeout <ms>] [--out-dir <dir>]");
+  if (flags.sprint && isGitRepo(flags.cwd || cwd)) {
+    return fail(`codex-resume --sprint is not isolated. A timed-out isolated turn keeps running in its worktree (never killed) - wait for it, then 'jam reconcile --sprint ${flags.sprint}', or run 'jam codex-run --sprint ${flags.sprint}' to open a fresh isolated turn.`);
+  }
   let prompt;
   try { prompt = fs.readFileSync(flags["prompt-file"], "utf8"); } catch (e) { return fail(`cannot read prompt file: ${e.message}`); }
   const outDir = flags["out-dir"] || fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
@@ -548,6 +759,8 @@ async function main() {
       return cmdAdvance(cwd);
     case "codex-run":
       return cmdCodexRun(cwd, positional, flags);
+    case "reconcile":
+      return cmdReconcile(cwd, positional, flags);
     case "codex-resume":
       return cmdCodexResume(cwd, positional, flags);
     case "codex-status":
