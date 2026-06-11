@@ -125,6 +125,35 @@ test("openTurnWorktree sparse-excludes committed symlinks and reconcile preserve
   assert.match(fs.readFileSync(path.join(root, "code.txt"), "utf8"), /turn/);
 });
 
+test("openTurnWorktree refuses committed symlink paths containing a newline", () => {
+  const { root, g } = gitRepo();
+  const unsafeName = "back\nlink";
+  const unsafePath = path.join(root, unsafeName);
+  fs.symlinkSync(root, unsafePath, "dir");
+  g("add", "-A");
+  const commit = g("commit", "-qm", "newline symlink");
+  assert.equal(commit.status, 0, commit.stderr);
+
+  const priorScratch = process.env.JAM_WORKTREE_ROOT;
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "jam-wt-scratch-"));
+  process.env.JAM_WORKTREE_ROOT = scratch;
+  try {
+    assert.throws(
+      () => openTurnWorktree({ repoRoot: root, sprintId: "s1", token: "newline-symlink" }),
+      /openTurnWorktree: cannot safely exclude path with newline/
+    );
+    const entries = fs.existsSync(scratch) ? fs.readdirSync(scratch) : [];
+    assert.deepEqual(entries, []);
+    assert.equal(fs.lstatSync(unsafePath).isSymbolicLink(), true);
+    assert.equal(fs.readFileSync(path.join(root, "code.txt"), "utf8"), "v1\n");
+    assert.equal(fs.existsSync(path.join(root, "owned.txt")), false);
+  } finally {
+    if (priorScratch === undefined) delete process.env.JAM_WORKTREE_ROOT;
+    else process.env.JAM_WORKTREE_ROOT = priorScratch;
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
 test("reconcile NEVER lands jam internals (loop-runs/ACTIVE) even when tracked — closes the ACTIVE-clobber vector", () => {
   const { root, g } = gitRepo();
   fs.mkdirSync(path.join(root, "docs", "superpowers", "loop-runs"), { recursive: true });

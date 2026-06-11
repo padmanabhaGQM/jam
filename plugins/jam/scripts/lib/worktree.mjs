@@ -25,24 +25,43 @@ export function isGitRepo(root) {
   return git(root, ["rev-parse", "--is-inside-work-tree"]).stdout.trim() === "true";
 }
 
+export function parseLsTreeRecords(out) {
+  const records = [];
+  for (const entry of out.split("\0")) {
+    if (!entry) continue;
+    const tab = entry.indexOf("\t");
+    if (tab === -1) continue;
+    const header = entry.slice(0, tab);
+    const path = entry.slice(tab + 1);
+    const [mode, type, sha, size] = header.trim().split(/\s+/);
+    if (!mode || !type || !sha) continue;
+    records.push({ mode, type, sha, size, path });
+  }
+  return records;
+}
+
 export function largeTrackedBlobs(repoRoot, ref, maxBytes) {
-  const out = git(repoRoot, ["ls-tree", "-r", "-l", ref]).stdout;
+  const out = git(repoRoot, ["ls-tree", "-r", "-l", "-z", ref]).stdout;
   const big = [];
-  for (const line of out.split("\n")) {
-    const m = line.match(/^\S+ \S+ \S+\s+(\d+)\t(.+)$/);   // <mode> <type> <sha> <size>\t<path>
-    if (m && Number(m[1]) > maxBytes) big.push(m[2]);
+  for (const entry of parseLsTreeRecords(out)) {
+    if (entry.size && Number(entry.size) > maxBytes) big.push(entry.path);
   }
   return big;
 }
 
 function trackedSymlinks(repoRoot, ref) {
-  const out = git(repoRoot, ["ls-tree", "-r", ref]).stdout;
+  const out = git(repoRoot, ["ls-tree", "-r", "-z", ref]).stdout;
   const links = [];
-  for (const line of out.split("\n")) {
-    const m = line.match(/^120000 \S+ \S+\t(.+)$/);
-    if (m) links.push(m[1]);
+  for (const entry of parseLsTreeRecords(out)) {
+    if (entry.mode === "120000") links.push(entry.path);
   }
   return links;
+}
+
+function assertSparseExcludesAreLineSafe(paths) {
+  if (paths.some((p) => p.includes("\n") || p.includes("\0"))) {
+    throw new Error("openTurnWorktree: cannot safely exclude path with newline — refusing to open an isolated worktree");
+  }
 }
 
 // Snapshot HEAD + tracked changes + untracked-not-ignored into a dangling commit (no main-tree/index/branch
@@ -79,12 +98,13 @@ export function openTurnWorktree({ repoRoot, sprintId, token, runId, maxBlobByte
     const wt = path.join(scratch, `${namespace}-${slug(token)}`);  // runId-namespaced: tokens like fix-1#1 repeat across runs
     fs.mkdirSync(path.dirname(wt), { recursive: true });
     if (!baselineRef) throw new Error("openTurnWorktree: failed to create baseline commit");
+    const big = largeTrackedBlobs(repoRoot, baselineRef, max);
+    // Symlinks are excluded fail-safe: a checked-out repo symlink could physically point back into the controller tree.
+    const sparseExcludes = [...big, ...trackedSymlinks(repoRoot, baselineRef)];
+    assertSparseExcludesAreLineSafe(sparseExcludes);
     const add = git(repoRoot, ["worktree", "add", "--no-checkout", wt, baselineRef]);
     if (add.code !== 0) throw new Error(`openTurnWorktree: git worktree add failed: ${add.stderr}`);
     try {
-      const big = largeTrackedBlobs(repoRoot, baselineRef, max);
-      // Symlinks are excluded fail-safe: a checked-out repo symlink could physically point back into the controller tree.
-      const sparseExcludes = [...big, ...trackedSymlinks(repoRoot, baselineRef)];
       if (git(wt, ["sparse-checkout", "init", "--no-cone"]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout init failed");
       if (git(wt, ["sparse-checkout", "set", "/*", ...sparseExcludes.map((p) => `!${p}`)]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout set failed");
       const co = git(wt, ["checkout"]);
