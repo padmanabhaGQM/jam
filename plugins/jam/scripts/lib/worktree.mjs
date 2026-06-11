@@ -135,10 +135,11 @@ export function reconcileTurnWorktree({ repoRoot, worktreePath, baselineRef, hea
   // Detect it: refuse to reconcile onto a controller whose HEAD moved during the turn.
   if (headAtOpen && git(repoRoot, ["rev-parse", "HEAD"]).stdout.trim() !== headAtOpen) return { applied: false, headMoved: true };
   if (git(worktreePath, ["add", "-A"]).code !== 0) return { applied: false, error: "git add failed in worktree" };
-  const nd = git(worktreePath, ["diff", "--cached", "--name-only", baselineRef, ...RECONCILE_EXCLUDES]);
+  const nd = git(worktreePath, ["diff", "--cached", "--name-only", "-z", baselineRef, ...RECONCILE_EXCLUDES]);
   if (nd.code !== 0) return { applied: false, error: "git diff (names) failed" };
-  const names = nd.stdout.split("\n").filter(Boolean);
+  const names = nd.stdout.split("\0").filter(Boolean);
   if (names.length === 0) return { applied: false, empty: true };   // genuine no-op (a real failure returns {error} above)
+  if (names.some((p) => p.includes("\n"))) return { applied: false, error: "touched path contains a newline — refusing to reconcile" };
   // path-level drift by CONTENT HASH (not `git diff baselineRef`, which falsely reports a baseline-captured
   // UNTRACKED file as deleted): each touched path's current main-tree content must equal its baseline blob.
   for (const p of names) {

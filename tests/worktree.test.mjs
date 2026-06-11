@@ -77,6 +77,20 @@ test("reconcile refuses (drift) when the main tree changed under the turn", () =
   assert.equal(r.drift, true);
 });
 
+test("reconcile refuses when a newline path could hide concurrent drift on another touched file", () => {
+  const { root } = gitRepo();
+  const { worktreePath, baselineRef } = openTurnWorktree({ repoRoot: root, sprintId: "s1", token: "s1#1" });
+  const newlineName = "note\nwith-newline.txt";
+
+  fs.writeFileSync(path.join(worktreePath, newlineName), "turn newline file\n");
+  fs.writeFileSync(path.join(worktreePath, "code.txt"), "turn normal edit\n");
+  fs.writeFileSync(path.join(root, "code.txt"), "human edit while turn open\n");
+
+  const r = reconcileTurnWorktree({ repoRoot: root, worktreePath, baselineRef });
+  assert.deepEqual(r, { applied: false, error: "touched path contains a newline — refusing to reconcile" });
+  assert.equal(fs.readFileSync(path.join(root, "code.txt"), "utf8"), "human edit while turn open\n");
+});
+
 test("reconcile refuses if the controller HEAD moved during the turn (shared-ref detector)", () => {
   const { root, g } = gitRepo();
   const { worktreePath, baselineRef, headAtOpen } = openTurnWorktree({ repoRoot: root, sprintId: "s1", token: "s1#1" });

@@ -460,10 +460,11 @@ function reconcileTurnWorktreeForCli({ repoRoot, worktreePath, baselineRef, head
   if (!worktreePath || !baselineRef || !fs.existsSync(worktreePath)) return { applied: false, error: "missing worktree or baseline" };
   if (headAtOpen && gitText(repoRoot, ["rev-parse", "HEAD"]).stdout.trim() !== headAtOpen) return { applied: false, headMoved: true };
   if (gitText(worktreePath, ["add", "-A"]).code !== 0) return { applied: false, error: "git add failed in worktree" };
-  const nd = gitText(worktreePath, ["diff", "--cached", "--name-only", baselineRef, ...RECONCILE_EXCLUDES]);
+  const nd = gitText(worktreePath, ["diff", "--cached", "--name-only", "-z", baselineRef, ...RECONCILE_EXCLUDES]);
   if (nd.code !== 0) return { applied: false, error: "git diff (names) failed" };
-  const names = nd.stdout.split("\n").filter(Boolean);
+  const names = nd.stdout.split("\0").filter(Boolean);
   if (names.length === 0) return { applied: false, empty: true };
+  if (names.some((p) => p.includes("\n"))) return { applied: false, error: "touched path contains a newline — refusing to reconcile" };
   for (const p of names) {
     const bp = gitText(repoRoot, ["rev-parse", `${baselineRef}:${p}`]);
     const baseId = bp.code === 0 ? bp.stdout.trim() : null;
