@@ -14,6 +14,7 @@ You drive ganjam's **greenfield** mode: build-from-intent. This is the sibling o
 - **Both agents use their superpowers skills at every step** (below).
 - **Evidence over assertion.** A feasibility claim is only `evidenced` if it carries a real Codex probe transcript. You (Claude) cannot self-assert feasibility.
 - **Two independent groundings, then cross-examination.** Do not let one side's framing stand unchallenged.
+- **Record review rounds.** Record EVERY adversarial review turn, not only the passing one: each turn, `jam verify --file <verdict.json>` (a failing verdict appends a `verification` entry with its blocker count) AND `jam review-round --phase VERIFY --round <n> --blockers <k>`. After FINISH, record each whole-slice review round with `jam review-round --phase SLICE --round <n> --blockers <k>`. `jam report` then reproduces the run's quality story from the ledger.
 
 ## The GROUND flow
 1. **Sharpen the intent** — invoke `superpowers:brainstorming` to turn the raw intent (`goal.md`) into a crisp problem statement + acceptance dimensions. Write `{problem, dimensions}` and run:

@@ -9,7 +9,7 @@ repair/hardening loop for Claude Code — **without surrendering your control.**
 
 Governing principle: **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — on-disk state, mechanism-bound gates, an immutable ledger, a run-honesty audit — that the models cannot talk past.
 
-> **Status — pre-alpha.** The control surface is built and unit-tested (354 tests), and the full `DIAGNOSE → VERIFY → PLAN → IMPLEMENT → FINISH` loop has been **driven end-to-end with real Codex** on a controlled repo (real bug, real `verify.sh`; Codex grounded the diagnosis and implemented the fix; the global gate, role-binding, and honesty audit all held to FINISH). **Not yet proven:** a hard repair under live human gate-supervision, and the VERIFY adversarial-review turn against real Codex. Treat jam as rigorously built but not battle-tested. See [CHANGELOG.md](CHANGELOG.md).
+> **Status — pre-alpha.** The control surface is built and unit-tested (373 tests), and the full `DIAGNOSE → VERIFY → PLAN → IMPLEMENT → FINISH` loop has been **driven end-to-end with real Codex** on a controlled repo (real bug, real `verify.sh`; Codex grounded the diagnosis and implemented the fix; the global gate, role-binding, and honesty audit all held to FINISH). **Not yet proven:** a hard repair under live human gate-supervision, and the VERIFY adversarial-review turn against real Codex. Treat jam as rigorously built but not battle-tested. See [CHANGELOG.md](CHANGELOG.md).
 
 **Two modes.** jam runs in **repair** mode (`jam diagnose` — fix/harden an existing repo through `DIAGNOSE→VERIFY→PLAN→IMPLEMENT→FINISH`) or **greenfield** mode (`jam start --mode greenfield` — build from a raw intent, starting with a `GROUND` phase that produces an evidence-backed, human-ratified grounded-intent). The `CONVERGE` phase then converges Claude+Codex on one evidence-backed architecture decision (human-ratified). `SPECIFY` then authors the project's global `verifyCmd` as a human-ratified, un-gameable SSOT (red-first + dimension-coverage + a Codex gameability audit). Finally `BUILD` runs the gated sprint loop against that locked verifyCmd to `FINISH` — the same machinery repair mode uses. The full `intent → GROUND → CONVERGE → SPECIFY → BUILD → FINISH` greenfield loop is complete. Each Codex sprint turn runs in an isolated worktree and only lands in your tree via a gated `jam reconcile` — a timed-out or runaway turn can't touch your working tree.
 
@@ -26,6 +26,7 @@ Governing principle: **trust the structure, not the model** (including not trust
 | **Hard-block tier** | Every consequential action is classified by reversibility; irreversible ones (`delete`, force-push, `DROP`, infra-destroy, deploy, restart-rearchitect) are structurally blocked behind a **typed `jam ratify <id> --confirm <id>`** — **agent consensus can never authorize a catastrophe.** (In-turn Codex shell is the deferred G0.5 layer.) |
 | **Owned Codex engine** | Drives real Codex over `codex exec`; **never kills** a process (timeouts surface and stay resumable); live-thread reconciliation after pauses. |
 | **Supervision surface** | 4-detector digests (architecture trace, decision register, global map, coverage) + durable steering directives, rendered at gates. |
+| **`jam report`** | Read-only, data-backed run summaries from the ledger. |
 
 ## Requirements
 
@@ -127,7 +128,7 @@ jam covers the *hardening* middle of the lifecycle. Pair it with brainstorming/p
 
 ```bash
 git clone https://github.com/padmanabhaGQM/jam && cd jam
-npm test          # 354 tests, no dependencies (node --test)
+npm test          # 373 tests, no dependencies (node --test)
 # drive the CLI by hand from the clone:
 node plugins/jam/scripts/jam.mjs status
 ```

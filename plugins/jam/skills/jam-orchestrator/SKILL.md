@@ -128,6 +128,7 @@ jam ratify <id> --deny             # refuse
    jam verify --file <verdict.json>
    ```
    The gate is set to `verified` **only if** `unresolvedBlockers === 0` (or no blocker-level findings). A verdict with surviving blockers leaves the gate pending.
+   Record EVERY adversarial round, not only the passing one: each round, `jam verify --file <verdict.json>` (a failing verdict appends a `verification` entry with its blocker count) AND `jam review-round --phase VERIFY --round <n> --blockers <k>`. After FINISH, record each whole-slice review round with `jam review-round --phase SLICE --round <n> --blockers <k>`. `jam report` then reproduces the run's quality story from the ledger.
 
 5. **Blockers survived → revise the diagnosis.**
    If `jam verify` reports the gate is still pending (blockers survived), the diagnosis is **not safe to plan from**. Do not advance. Return to DIAGNOSE:
