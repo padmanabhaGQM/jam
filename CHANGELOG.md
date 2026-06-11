@@ -5,6 +5,11 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.17.0 — Turn-lifecycle repo safety
+- A Codex sprint turn now runs in an **isolated git worktree** seeded from a checkpoint of the working tree (tracked + untracked, large tracked blobs sparse-excluded). A running, timed-out, or superseded turn **cannot mutate the controller's tree or HEAD** — the only ingress is `jam reconcile --sprint <id>`, gated on the turn's generation token, its bound Codex session, turn completion, and no main-tree drift.
+- `jam reconcile` applies the turn's net diff to the main tree (preserving in-progress dirty work); `sprint --verify`/`--done` refuse while an isolated turn is un-reconciled. never-kill is preserved — a runaway turn is contained in a disposable worktree, never signalled.
+- Non-git targets fall back to in-place editing with a visible warning + a `turn-unisolated` ledger entry. Bonus: worktree isolation incidentally contains a destructive in-turn shell to the throwaway worktree.
+
 ## 0.16.0 — Foundation hardening (FINISH liveness + content-bound authorship)
 - Advancing to FINISH (repair IMPLEMENT→FINISH and greenfield BUILD→FINISH) now **re-runs the locked `verifyCmd` against the current workspace** and refuses if it is red — a run can no longer FINISH on stale per-sprint evidence. A `final-verification` ledger entry is recorded, and `jam audit` requires it after the last sprint.
 - Codex authorship binding is **content-bound**: `bindCodexSession` accepts the located rollout only if its `session_meta.payload.id` equals the bound session id (filename substring matching alone was forgeable). Honest boundary: this authenticates file↔session identity, not diff authorship, and is bounded by who can write `CODEX_HOME/sessions`.

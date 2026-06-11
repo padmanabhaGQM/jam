@@ -201,24 +201,30 @@ Work the sprint list **one at a time, in order**. Each sprint is gated by the ru
      --timeout 600000 \
      --out-dir <run>/codex/<id>
    ```
-   `buildSprintPrompt` instructs Codex to use `superpowers:test-driven-development`, implement **exactly** this sprint, honor active steering directives, and return exact evidence. Passing `--sprint <id>` binds this Codex session (id + transcript) to the sprint — the authorship record step 5 requires. Resume with `jam codex-resume <sessionId> --sprint <id>` as needed. The **Codex-hang protocol** (never-kill + live-thread reconciliation) applies to every engine call here.
+   The sprint cadence is `--start → codex-run --sprint (runs in an isolated worktree) → jam reconcile --sprint → --verify → --done`. `buildSprintPrompt` instructs Codex to use `superpowers:test-driven-development`, implement **exactly** this sprint, honor active steering directives, and return exact evidence. Passing `--sprint <id>` binds this Codex session (id + transcript) to the sprint — the authorship record step 6 requires. A timed-out ISOLATED sprint turn is not resumed via `codex-resume` — wait for the turn (never killed) and run `jam reconcile --sprint <id>`, or open a fresh superseding `jam codex-run --sprint <id>`. The **Codex-hang protocol** (never-kill + live-thread reconciliation) applies to every engine call here; a timed-out turn is reconciled, not lost, once it completes.
 
-3. **Verify against the global gate.**
+3. **Reconcile the isolated turn.**
+   ```bash
+   jam reconcile --sprint <id>
+   ```
+   Applies the completed isolated worktree turn to the main tree through jam's gate. `jam sprint <id> --verify` and `--done` refuse while an isolated turn is still un-reconciled.
+
+4. **Verify against the global gate.**
    ```bash
    jam sprint <id> --verify
    ```
    jam runs the **global `verifyCmd`**; the sprint passes only on exit 0. If it fails, do not force — iterate (more `codex-run` on the same thread) or take a `/jam:steer` directive, then re-verify.
 
-4. **Second, non-author check + digest.**
+5. **Second, non-author check + digest.**
    Run `/codex:adversarial-review` on the diff (an independent read of the change). Render a digest and surface it to the user.
 
-5. **Human go/no-go.**
+6. **Human go/no-go.**
    ```bash
    jam sprint <id> --done
    ```
    Refuses unless the sprint is verified (global `verifyCmd` exited 0) **and** a Codex session authored it (a bound session with a locatable transcript). This is the user's sign-off to close the sprint.
 
-6. **Next sprint.** Repeat 1–5 for each. When all sprints are `done`:
+7. **Next sprint.** Repeat 1–6 for each. When all sprints are `done`:
    ```bash
    jam advance   # → FINISH (refuses unless ALL sprints done AND the honesty audit passes)
    ```

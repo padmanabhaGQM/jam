@@ -5,10 +5,10 @@ import { sessionIdFromEventLog, hasTurnCompleted } from "./session.mjs";
 
 function resolveBin(codexBin) { return codexBin || process.env.JAM_CODEX_BIN || "codex"; }
 
-function spawnDetached(bin, args, { prompt, eventLog }) {
+function spawnDetached(bin, args, { prompt, eventLog, cwd }) {
   fs.mkdirSync(path.dirname(eventLog), { recursive: true });
   const out = fs.openSync(eventLog, "a");
-  const child = spawn(bin, args, { detached: true, stdio: ["pipe", out, out] });
+  const child = spawn(bin, args, { cwd, detached: true, stdio: ["pipe", out, out] });
   // A bad/missing binary (e.g. misconfigured JAM_CODEX_BIN) emits 'error' asynchronously.
   // Swallow it with a breadcrumb so the CLI never crashes; codexWait will simply time out.
   // (Never kill: we attach handlers, we do not terminate anything.)
@@ -27,7 +27,7 @@ function spawnDetached(bin, args, { prompt, eventLog }) {
 
 export function codexStart({ prompt, cwd, sandbox = "workspace-write", codexBin, eventLog, lastMsg }) {
   const args = ["exec", "--json", "--sandbox", sandbox, "--cd", cwd, "-o", lastMsg, "-"];
-  return { ...spawnDetached(resolveBin(codexBin), args, { prompt, eventLog }), lastMsg };
+  return { ...spawnDetached(resolveBin(codexBin), args, { prompt, eventLog, cwd }), lastMsg };
 }
 
 export function codexResume({ sessionId, prompt, codexBin, eventLog, lastMsg }) {

@@ -146,9 +146,19 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     const sprint = sprints.find((s) => s.id === S);
     const transcriptOk = (sprint?.codexSessions ?? []).some((s) => transcriptExists(s.transcriptPath));
     if (!transcriptOk) failures.push(`authorship: sprint ${S} has no bound session with an existing transcript`);
-    const evIdx = ledger.findIndex((x, xi) => xi < d && x.type === "evidence" && x.sprintId === S && x.gateId === `sprint-${S}` && x.exitCode === 0);
+    let evIdx = -1;
+    ledger.forEach((x, xi) => { if (xi < d && x.type === "evidence" && x.sprintId === S && x.gateId === `sprint-${S}` && x.exitCode === 0) evIdx = xi; });
     if (evIdx === -1) failures.push(`evidence: sprint-done ${S} has no preceding passing evidence (exit 0)`);
     else if (startedIdx !== -1 && startedIdx > evIdx) failures.push(`ordering: sprint ${S} evidence was recorded before it was started`);
+    // The LAST isolated turn opened before this sprint-done must have been reconciled UNDER ITS OWN TOKEN
+    // before the done (a reconciled s1#1 must not satisfy an open/unreconciled s1#2).
+    let lastOpen = null, lastOpenIdx = -1;
+    ledger.forEach((x, xi) => { if (xi < d && x.type === "turn-opened" && x.sprintId === S && x.isolated !== false) { lastOpen = x; lastOpenIdx = xi; } });
+    if (lastOpen) {
+      const reconciledIdx = ledger.findIndex((x, xi) => xi > lastOpenIdx && xi < d && x.type === "turn-reconciled" && x.sprintId === S && x.token === lastOpen.token);
+      if (reconciledIdx === -1) failures.push(`ordering: sprint-done ${S} not preceded by a turn-reconciled for the live turn ${lastOpen.token}`);
+      else if (evIdx !== -1 && evIdx <= reconciledIdx) failures.push(`evidence: sprint-done ${S} evidence predates the reconciled turn — re-verify after reconcile`);
+    }
   });
 
   for (const sp of sprints) {

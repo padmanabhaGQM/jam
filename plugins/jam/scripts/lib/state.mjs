@@ -63,6 +63,12 @@ export function validateState(state) {
     if (!VALID_STATUSES.includes(g.status)) errors.push(`gate ${id}: invalid status ${g.status}`);
   }
   for (const sp of state.plan?.sprints ?? []) {
+    if ("turn" in sp && sp.turn !== null) {
+      const t = sp.turn;
+      if (typeof t.token !== "string") errors.push(`sprint ${sp.id}: turn.token must be a string`);
+      if (!["open", "reconciled", "discarded"].includes(t.status)) errors.push(`sprint ${sp.id}: turn.status invalid`);
+    }
+    if ("turnSeq" in sp && !Number.isInteger(sp.turnSeq)) errors.push(`sprint ${sp.id}: turnSeq must be an integer`);
     if ("codexSessions" in sp) {
       if (!Array.isArray(sp.codexSessions)) {
         errors.push(`sprint ${sp.id}: codexSessions must be an array`);
