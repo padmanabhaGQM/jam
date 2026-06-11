@@ -5,6 +5,10 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.18.0 — jam report (observability)
+- `jam report [<runId>] [--json]` — a faithful, strictly read-only summary of a run from its ledger + state: wall time, phase dwell, review rounds + rounds-to-zero, sprint durations + authorship/evidence, turn-isolation stats, final-verification, audit. `jam report --all` lists every run one line each (corrupt run dirs tolerated).
+- `jam review-round --phase VERIFY|SLICE --round <n> --blockers <k>` — append-only, audit-inert ledger enrichment so future runs carry round-level review data (historical runs render an explicit "round-level review data not recorded" note instead of invented numbers).
+
 ## 0.17.0 — Turn-lifecycle repo safety
 - A Codex sprint turn now runs in an **isolated git worktree** seeded from a checkpoint of the working tree (tracked + untracked, large tracked blobs sparse-excluded). A running, timed-out, or superseded turn **cannot mutate the controller's tree or HEAD** — the only ingress is `jam reconcile --sprint <id>`, gated on the turn's generation token, its bound Codex session, turn completion, and no main-tree drift.
 - `jam reconcile` applies the turn's net diff to the main tree (preserving in-progress dirty work); `sprint --verify`/`--done` refuse while an isolated turn is un-reconciled. never-kill is preserved — a runaway turn is contained in a disposable worktree, never signalled.
