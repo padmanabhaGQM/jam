@@ -177,3 +177,27 @@ test("auditRun reads a real run dir: PASS with a real transcript, FAIL without",
   fs.rmSync(tp);
   assert.equal(auditRun({ runDir: dir }).ok, false);
 });
+
+test("an isolated sprint-done requires a preceding turn-reconciled of the same sprint", () => {
+  const ledger = [
+    { type: "turn-opened", sprintId: "s1", token: "s1#1", isolated: true },
+    { type: "codex-bound", sprintId: "s1" },
+    { type: "evidence", sprintId: "s1", gateId: "sprint-s1", exitCode: 0 },
+    { type: "sprint-done", sprintId: "s1" },        // NO turn-reconciled between open and done
+  ];
+  const state = { mode: "repair", plan: { sprints: [{ id: "s1", status: "done", provenance: "planned", codexSessions: [{ transcriptPath: "/x" }] }] } };
+  const r = evaluateAudit({ ledger, state, transcriptExists: () => true });
+  assert.ok(r.failures.some((f) => /turn-reconciled|reconcile/.test(f)));
+});
+
+test("an unisolated sprint-done (turn-unisolated) is allowed (recorded, not failed)", () => {
+  const ledger = [
+    { type: "turn-unisolated", sprintId: "s1" },
+    { type: "codex-bound", sprintId: "s1" }, { type: "sprint-started", sprintId: "s1" },
+    { type: "evidence", sprintId: "s1", gateId: "sprint-s1", exitCode: 0 },
+    { type: "sprint-done", sprintId: "s1" },
+  ];
+  const state = { mode: "repair", plan: { sprints: [{ id: "s1", status: "done", provenance: "planned", codexSessions: [{ transcriptPath: "/x" }] }] } };
+  const r = evaluateAudit({ ledger, state, transcriptExists: () => true });
+  assert.ok(!r.failures.some((f) => /turn-reconciled|reconcile/.test(f)));
+});
