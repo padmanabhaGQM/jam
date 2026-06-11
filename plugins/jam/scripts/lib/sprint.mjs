@@ -4,6 +4,7 @@ import { readState, writeState, addGate } from "./state.mjs";
 import { recordEvidence } from "./actions.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { locateTranscript, transcriptMatchesSession } from "./codex/session.mjs";
+import { evaluateGate } from "./gate.mjs";
 
 function nowIso(now) { return now ?? new Date().toISOString(); }
 function sprintGateId(id) { return `sprint-${id}`; }
@@ -18,7 +19,7 @@ export function startSprint({ runDir: dir, sprintId, now }) {
   if (state.phase !== "IMPLEMENT" && !(state.mode === "greenfield" && state.phase === "BUILD")) {
     throw new Error(`cannot start a sprint: phase is ${state.phase}, not IMPLEMENT (or greenfield BUILD)`);
   }
-  if (state.mode === "greenfield" && state.phase === "BUILD" && (state.gates["BUILD-plan"]?.status !== "approved")) {
+  if (state.mode === "greenfield" && state.phase === "BUILD" && !evaluateGate(state, "BUILD-plan").allowed) {
     throw new Error(`cannot start a sprint: the BUILD-plan gate must be approved first (the human gates the sprint breakdown)`);
   }
   const sprint = (state.plan?.sprints ?? []).find((s) => s.id === sprintId);

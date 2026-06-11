@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { readLedger } from "./ledger.mjs";
 import { readState } from "./state.mjs";
+import { evaluateGate } from "./gate.mjs";
 import { repairPhaseOrder, greenfieldPhaseOrder, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
 import { allSprintsDone } from "./sprint.mjs";   // run-honesty: a finished greenfield BUILD has all sprints done
 
@@ -161,7 +162,7 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
   // gate presence, so a forged state that simply OMITS the BUILD-plan gate cannot slip past this check.
   const phaseIdx = ORDER.indexOf(state.phase);
   if (greenfield && phaseIdx >= ORDER.indexOf("BUILD")) {
-    const gateOk = state.gates && state.gates["BUILD-plan"] && state.gates["BUILD-plan"].status === "approved";
+    const gateOk = state.gates && state.gates["BUILD-plan"] && evaluateGate(state, "BUILD-plan").allowed;
     if (!gateOk) failures.push("ordering: greenfield BUILD requires an approved BUILD-plan gate");
     let buildFloor = -1;
     ledger.forEach((x, xi) => { if (x.type === "phase-rewound" && ORDER.indexOf(x.to) <= ORDER.indexOf("BUILD")) buildFloor = xi; });
@@ -184,7 +185,7 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     // and back-fill the plan afterward.
     if (finishIdx !== -1) {
       if (planIdx === -1 || planIdx >= finishIdx) failures.push("ordering: BUILD->FINISH advanced without a preceding plan-recorded");
-      if (apprIdx === -1 || apprIdx >= finishIdx) failures.push("ordering: BUILD->FINISH advanced without a preceding BUILD-plan approval");
+      if (!buildAuthorized) failures.push("ordering: BUILD->FINISH advanced without a preceding BUILD-plan approval");
     }
     // A finished greenfield BUILD (BUILD->FINISH recorded, or the run is already at FINISH) must have ALL
     // build sprints done — the standalone `jam audit` must be as strict as the live advanceRun's allSprintsDone.

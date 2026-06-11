@@ -17,7 +17,7 @@ import { isGitRepo, openTurnWorktree, reconcileTurnWorktree, discardTurnWorktree
 import { readState, writeState } from "./lib/state.mjs";
 import { appendLedger } from "./lib/ledger.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
-import { addSteering, cancelRun, recordVerification, rejectGate, rewindPhase } from "./lib/control.mjs";
+import { addSteering, cancelRun, recordVerification, rejectGate, rewindPhase, dialGate } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { sharpenIntent, addClaim, refuteClaim, convergeGrounding } from "./lib/grounding.mjs";
 import { setShortlist, recordDecision, ruleTiebreak, convergeDecision } from "./lib/convergence.mjs";
@@ -247,6 +247,18 @@ function cmdRewind(cwd, positional, flags) {
     return fail(e.message);
   }
   process.stdout.write(`rewound to ${toPhase} — later-phase gates re-armed; re-produce artifacts and re-approve. (The working tree is NOT rolled back — that is git's job.)\n`);
+}
+
+function cmdDial(cwd, positional, flags) {
+  const gateId = positional[0];
+  if (!gateId || !flags.mode) return fail("usage: jam dial <gateId> --mode <human|show-and-proceed> [--confirm <gateId>]");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    dialGate({ runDir: dir, gateId, mode: flags.mode, confirm: flags.confirm });
+  } catch (e) {
+    return fail(e.message);
+  }
+  process.stdout.write(`gate ${gateId} dialed to ${flags.mode}\n`);
 }
 
 function cmdAddGate(cwd, positional, flags) {
@@ -872,6 +884,8 @@ async function main() {
       return cmdReject(cwd, positional, flags);
     case "rewind":
       return cmdRewind(cwd, positional, flags);
+    case "dial":
+      return cmdDial(cwd, positional, flags);
     case "add-gate":
       return cmdAddGate(cwd, positional, flags);
     case "evidence":

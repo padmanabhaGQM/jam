@@ -18,10 +18,13 @@ export function evaluateGate(state, gateId) {
       return g.status === "approved"
         ? { allowed: true, reason: `gate ${gateId}: human approved` }
         : { allowed: false, reason: `gate ${gateId}: awaiting human approval — run /jam:approve ${gateId}` };
-    case "show-and-proceed":
-      return ["rendered", "approved", "evidence-passed"].includes(g.status)
-        ? { allowed: true, reason: `gate ${gateId}: digest rendered` }
-        : { allowed: false, reason: `gate ${gateId}: awaiting digest render` };
+    case "show-and-proceed": {
+      const ok = ["rendered", "approved", "evidence-passed"];
+      if (g.approveFrom && !ok.includes(g.approveFrom)) ok.push(g.approveFrom);
+      return ok.includes(g.status)
+        ? { allowed: true, reason: `gate ${gateId}: artifact produced (show-and-proceed)` }
+        : { allowed: false, reason: `gate ${gateId}: awaiting its artifact (status=${g.status}, needs ${g.approveFrom ?? "rendered"})` };
+    }
     default:
       return { allowed: false, reason: `gate ${gateId}: unknown mode ${g.mode}` };
   }

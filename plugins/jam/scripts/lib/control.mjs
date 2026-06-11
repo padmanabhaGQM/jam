@@ -73,11 +73,30 @@ export function rewindPhase({ runDir: dir, toPhase, confirm, now }) {
   return state;
 }
 
+const MODE_RANK = { "show-and-proceed": 0, human: 1 };
+export function dialGate({ runDir: dir, gateId, mode, confirm, now }) {
+  const state = readState(dir);
+  const g = getGate(state, gateId);
+  if (mode === "auto") throw new Error("dialGate: a gate cannot be dialed to auto - auto is earned by evidence, not granted");
+  if (!(mode in MODE_RANK)) throw new Error(`dialGate: unknown mode ${mode}`);
+  if (g.approveFrom === "ratified") throw new Error(`dialGate: ${gateId} guards an irreversible action - ratification gates are never dialable`);
+  if (g.approveFrom === "contested") throw new Error(`dialGate: ${gateId} is a tiebreak gate - it is satisfied only by a ruling (jam converge tiebreak), never dialable`);
+  if (gateId.startsWith("sprint-")) throw new Error(`dialGate: ${gateId} is a sprint evidence gate - never dialable`);
+  if (g.mode === "auto" && mode !== "human") throw new Error("dialGate: an auto gate can only be TIGHTENED to human");
+  const loosening = MODE_RANK[mode] < MODE_RANK[g.mode];
+  if (loosening && confirm !== gateId) throw new Error(`dialGate: loosening ${gateId} requires typed --confirm ${gateId}`);
+  const from = g.mode;
+  g.mode = mode;
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "gate-dialed", gateId, from, to: mode });
+  return state;
+}
+
 export function recordVerification({ runDir: dir, gateId, verdict, now }) {
   const state = readState(dir);
   const g = getGate(state, gateId);
-  if (g.mode !== "human") {
-    throw new Error(`cannot record verification for gate ${gateId}: verification applies only to human gates (mode=${g.mode})`);
+  if (g.mode !== "human" && g.mode !== "show-and-proceed") {
+    throw new Error(`cannot record verification for gate ${gateId}: verification applies only to human or show-and-proceed gates, not auto gates (mode=${g.mode})`);
   }
   if (g.approveFrom !== "verified") {
     const got = g.approveFrom === "rendered" ? "digest" : "plan";
