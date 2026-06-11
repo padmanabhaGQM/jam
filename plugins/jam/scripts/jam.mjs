@@ -10,13 +10,14 @@ import os from "node:os";
 import { spawnSync } from "node:child_process";
 
 import { readActiveRunId, runsRoot, runDir } from "./lib/paths.mjs";
+import { phaseOrderFor } from "./lib/mode.mjs";
 import { codexStart, codexResume, codexWait } from "./lib/codex/exec.mjs";
 import { classifyTurn, sessionIdFromEventLog, locateTranscript, hasTurnCompleted } from "./lib/codex/session.mjs";
 import { isGitRepo, openTurnWorktree, reconcileTurnWorktree, discardTurnWorktree, gcWorktrees } from "./lib/worktree.mjs";
 import { readState, writeState } from "./lib/state.mjs";
 import { appendLedger } from "./lib/ledger.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
-import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
+import { addSteering, cancelRun, recordVerification, rejectGate } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { sharpenIntent, addClaim, refuteClaim, convergeGrounding } from "./lib/grounding.mjs";
 import { setShortlist, recordDecision, ruleTiebreak, convergeDecision } from "./lib/convergence.mjs";
@@ -200,6 +201,25 @@ function cmdApprove(cwd, positional) {
     return fail(e.message);
   }
   process.stdout.write(`gate ${gateId} approved\n`);
+}
+
+function cmdReject(cwd, positional, flags) {
+  const gateId = positional[0];
+  if (!gateId || !flags.reason) return fail('usage: jam reject <gateId> --reason "<text>"');
+  const { dir } = requireActiveRun(cwd);
+  try {
+    rejectGate({ runDir: dir, gateId, reason: flags.reason });
+  } catch (e) {
+    return fail(e.message);
+  }
+  const st = readState(dir);
+  const order = phaseOrderFor(st.mode);
+  const gatePhase = order.find((p) => gateId === p || gateId.startsWith(p + "-"));
+  if (gatePhase && order.indexOf(gatePhase) < order.indexOf(st.phase)) {
+    process.stdout.write(`gate ${gateId} rejected — it belongs to the earlier phase ${gatePhase}: re-producing may require 'jam rewind ${gatePhase} --confirm ${gatePhase}' first (phase-bound greenfield producers); repair digest/plan producers can run from any phase\n`);
+  } else {
+    process.stdout.write(`gate ${gateId} rejected — re-produce its artifact, then approve\n`);
+  }
 }
 
 function cmdAddGate(cwd, positional, flags) {
@@ -819,6 +839,8 @@ async function main() {
       return cmdRenderDigest(cwd, positional, flags);
     case "approve":
       return cmdApprove(cwd, positional);
+    case "reject":
+      return cmdReject(cwd, positional, flags);
     case "add-gate":
       return cmdAddGate(cwd, positional, flags);
     case "evidence":

@@ -14,6 +14,7 @@ export function evaluateGate(state, gateId) {
         ? { allowed: true, reason: `gate ${gateId}: evidence verified` }
         : { allowed: false, reason: `gate ${gateId}: awaiting verified evidence (status=${g.status})` };
     case "human":
+      if (g.status === "rejected") return { allowed: false, reason: `gate ${gateId}: rejected: ${g.rejectedReason ?? "(no reason)"} — re-produce its artifact, then approve` };
       return g.status === "approved"
         ? { allowed: true, reason: `gate ${gateId}: human approved` }
         : { allowed: false, reason: `gate ${gateId}: awaiting human approval — run /jam:approve ${gateId}` };

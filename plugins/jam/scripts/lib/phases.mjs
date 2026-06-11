@@ -15,6 +15,15 @@ export function advancePhase(state, { verified = false } = {}) {
   if (i === -1) throw new Error(`advancePhase: ${state.phase} is not a phase in mode ${state.mode ?? "repair"}`);
   const next = order[i + 1];
   if (!next) throw new Error(state.mode === "greenfield" ? `already at the final phase (${state.phase})` : `already at the final repair phase (${state.phase})`);
+  const openRejection = Object.entries(state.gates ?? {}).find(([gid, g]) => {
+    if (g.status !== "rejected") return false;
+    if (gid.startsWith("action-")) {
+      const act = (state.actions ?? []).find((a) => a.id === gid.slice("action-".length));
+      if (act && act.status === "denied") return false;
+    }
+    return true;
+  });
+  if (openRejection) throw new Error(`cannot advance: gate ${openRejection[0]} is rejected (${openRejection[1].rejectedReason ?? "no reason"}) — re-produce its artifact (rewind first if it belongs to an earlier phase) and resolve it`);
   // The FINISH transition requires the live verifyCmd re-verification that only advanceRun performs
   // (it has the run dir / project root). Refuse it here so the exported advancePhase cannot be used as a
   // public-lib bypass that persists FINISH without re-verifying the current workspace.

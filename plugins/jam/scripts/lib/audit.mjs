@@ -13,6 +13,22 @@ const PRODUCING_REPAIR = { DIAGNOSE: "digest-rendered", VERIFY: "verification", 
 const PRODUCING_GREENFIELD = { GROUND: "grounding-converged", CONVERGE: "convergence-decided", SPECIFY: "spec-certified" };
 // These producing artifacts carry no gateId — match them by type only (as plan-recorded already is for repair PLAN).
 const GATEID_AGNOSTIC = new Set(["plan-recorded", "grounding-converged", "convergence-decided", "spec-certified"]);
+const SUBGATE_REARM_TYPES = {
+  "BUILD-plan": "plan-recorded",
+  "GROUND-scope": "intent-sharpened",
+  "CONVERGE-shortlist": "shortlist-set",
+  "SPECIFY-coverage": "coverage-set",
+  ALIGN: "digest-rendered",
+};
+const SUBGATE_ID_AGNOSTIC_REARMS = new Set(["intent-sharpened", "shortlist-set", "coverage-set"]);
+
+export function rearmTypeFor(gateId, PRODUCING, state = {}) {
+  const producing = { ...PRODUCING, ...SUBGATE_REARM_TYPES }[gateId];
+  if (producing) return producing;
+  const g = state.gates?.[gateId];
+  if (g && (g.approveFrom ?? "rendered") === "rendered") return "digest-rendered";
+  return null;
+}
 
 export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
   const failures = [];
@@ -61,6 +77,23 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
       }
     });
   }
+
+  // A gate approved after a rejection must have been re-produced between the rejection and the approval.
+  ledger.forEach((e, i) => {
+    if (e.type !== "approval") return;
+    let lastRej = -1;
+    ledger.forEach((x, xi) => { if (xi < i && x.type === "gate-rejected" && x.gateId === e.gateId) lastRej = xi; });
+    if (lastRej === -1) return;
+    const producing = rearmTypeFor(e.gateId, PRODUCING, state);
+    if (!producing) {
+      failures.push(`ordering: gate ${e.gateId} approved after a rejection with no known re-arm artifact`);
+      return;
+    }
+    const reproduced = ledger.some((x, xi) => xi > lastRej && xi < i && x.type === producing &&
+      (GATEID_AGNOSTIC.has(producing) || SUBGATE_ID_AGNOSTIC_REARMS.has(producing) ? true : x.gateId === e.gateId) &&
+      (producing === "verification" ? x.blockers === 0 : true));
+    if (!reproduced) failures.push(`ordering: gate ${e.gateId} approved after being rejected without re-producing its artifact`);
+  });
 
   // BUILD's producer/approval is MANDATORY for any greenfield run at or past BUILD — keyed on PHASE, not on
   // gate presence, so a forged state that simply OMITS the BUILD-plan gate cannot slip past this check.
@@ -132,6 +165,11 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     ledger.forEach((e, i) => { if (e.type === "sprint-done") lastSprintDone = i; });
     const finalOk = ledger.some((e, i) => e.type === "final-verification" && e.exitCode === 0 && i > lastSprintDone);
     if (!finalOk) failures.push("evidence: FINISH requires a final-verification (verifyCmd exit 0) recorded after the last sprint");
+    for (const [gid, g] of Object.entries(state.gates ?? {})) {
+      if (g.status !== "rejected") continue;
+      if (gid.startsWith("action-") && (state.actions ?? []).some((a) => a.id === gid.slice("action-".length) && a.status === "denied")) continue;
+      failures.push(`governance: gate ${gid} is rejected — a finished run cannot carry an open rejection`);
+    }
   }
 
   const sprints = state.plan?.sprints ?? [];

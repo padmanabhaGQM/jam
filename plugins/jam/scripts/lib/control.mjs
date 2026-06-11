@@ -27,6 +27,23 @@ export function cancelRun({ projectRoot, runDir: dir, now }) {
   return true;
 }
 
+export function rejectGate({ runDir: dir, gateId, reason, now }) {
+  const state = readState(dir);
+  const g = getGate(state, gateId);
+  if (g.mode !== "human") throw new Error(`cannot reject gate ${gateId}: rejection applies only to human gates (mode=${g.mode})`);
+  if (g.approveFrom === "contested") throw new Error(`cannot reject gate ${gateId}: re-rule the tiebreak instead (jam converge tiebreak --choose <option>)`);
+  if (g.approveFrom === "ratified") throw new Error(`cannot reject gate ${gateId}: irreversible-action gates are refused via 'jam ratify <id> --deny', not reject`);
+  if (!reason || !String(reason).trim()) throw new Error("rejectGate: --reason is required");
+  if (String(reason).length > 500) throw new Error("rejectGate: reason must be <= 500 characters");
+  g.status = "rejected";
+  g.rejectedReason = String(reason);
+  g.approvedBy = null;
+  g.approvedAt = null;
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "gate-rejected", gateId, reason: String(reason) });
+  return state;
+}
+
 export function recordVerification({ runDir: dir, gateId, verdict, now }) {
   const state = readState(dir);
   const g = getGate(state, gateId);
