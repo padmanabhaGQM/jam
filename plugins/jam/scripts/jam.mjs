@@ -31,6 +31,7 @@ import { reportRun, renderReport } from "./lib/report.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
 import { shouldSweepAbandonedWorktree } from "./lib/worktree-sweep.mjs";
 import { evaluateDoctor, gatherProbes, renderDoctor } from "./lib/doctor.mjs";
+import { deriveNextAction } from "./lib/resume.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -121,9 +122,7 @@ function cmdDoctor(cwd) {
   if (!r.ok) process.exit(1);
 }
 
-function cmdStatus(cwd) {
-  const { runId, dir } = requireActiveRun(cwd);
-  const state = readState(dir);
+function renderStatus(state, runId) {
   const lines = [`run ${runId} — phase ${state.phase}`];
   if (state.mode === "greenfield") {
     const g = state.grounding ?? {};
@@ -170,7 +169,23 @@ function cmdStatus(cwd) {
   for (const a of state.actions ?? []) {
     lines.push(`  action ${a.id}: ${a.type ?? "?"} [${a.irreversible ? "HARD-BLOCK" : "ok"}] ${a.status}${a.reasons?.length ? " — " + a.reasons.join("; ") : ""}`);
   }
-  process.stdout.write(lines.join("\n") + "\n");
+  return lines.join("\n") + "\n";
+}
+
+function cmdStatus(cwd) {
+  const { runId, dir } = requireActiveRun(cwd);
+  const state = readState(dir);
+  process.stdout.write(renderStatus(state, runId));
+}
+
+function cmdResume(cwd) {
+  const id = readActiveRunId(cwd);
+  if (!id) { process.stdout.write("no active run — past runs:\n"); return cmdReport(cwd, [], { all: undefined }); }
+  const dir = runDir(cwd, id);
+  const st = readState(dir);
+  process.stdout.write(renderStatus(st, id));
+  const next = deriveNextAction(st);
+  process.stdout.write(`\nnext: ${next.message}\n`);
 }
 
 function cmdRenderDigest(cwd, positional, flags) {
@@ -835,6 +850,8 @@ async function main() {
       return cmdBuild(cwd, positional, flags);
     case "status":
       return cmdStatus(cwd);
+    case "resume":
+      return cmdResume(cwd);
     case "render-digest":
       return cmdRenderDigest(cwd, positional, flags);
     case "approve":
