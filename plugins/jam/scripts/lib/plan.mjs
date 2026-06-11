@@ -58,6 +58,7 @@ export function recordPlan({ runDir: dir, plan, now }) {
   if (g.approveFrom !== "planned") throw new Error(`gate PLAN is not a plan gate (approveFrom=${g.approveFrom})`);
   if (g.status === "approved") throw new Error("cannot record plan: PLAN gate already approved (cancel or rewind to change it)");
   fs.writeFileSync(path.join(dir, "plan.json"), JSON.stringify(plan, null, 2));
+  for (const id of Object.keys(state.gates)) if (id.startsWith("sprint-")) delete state.gates[id];
   state.plan = {
     verifyCmd: plan.verifyCmd,
     sprints: plan.sprints.map((s) => ({ id: s.id, title: s.title, acceptanceCriteria: s.acceptanceCriteria ?? "", status: "pending", provenance: "planned", needs: Array.isArray(s.needs) ? s.needs : [] }))

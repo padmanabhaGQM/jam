@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { readState, writeState, addGate } from "./state.mjs";
 import { appendLedger } from "./ledger.mjs";
+import { evaluateGate } from "./gate.mjs";
 
 function nowIso(now) { return now ?? new Date().toISOString(); }
 
@@ -50,7 +51,7 @@ export function recordDecision({ runDir: dir, agent, chosen, rationale, spikes, 
   if (!chosen) throw new Error("recordDecision: a chosen option is required");
   const state = readState(dir);
   requireConverge(state);
-  if (state.gates["CONVERGE-shortlist"].status !== "approved") throw new Error("recordDecision: the CONVERGE-shortlist gate must be approved first");
+  if (!evaluateGate(state, "CONVERGE-shortlist").allowed) throw new Error("recordDecision: the CONVERGE-shortlist gate must be approved first");
   if (!state.convergence.shortlist.includes(chosen)) throw new Error(`recordDecision: chosen "${chosen}" is not in the approved shortlist`);
   const c = state.convergence;
   c.decisions[agent] = { chosen, rationale: rationale ?? null, spikes: Array.isArray(spikes) ? spikes : [] };
@@ -95,7 +96,7 @@ export function ruleTiebreak({ runDir: dir, chosen, now }) {
 export function convergeDecision({ runDir: dir, ledger, spikes, acceptedUnknowns, now }) {
   const state = readState(dir);
   requireConverge(state);
-  if (state.gates["CONVERGE-shortlist"].status !== "approved") throw new Error("convergeDecision: the CONVERGE-shortlist gate must be approved first");
+  if (!evaluateGate(state, "CONVERGE-shortlist").allowed) throw new Error("convergeDecision: the CONVERGE-shortlist gate must be approved first");
   const c = state.convergence;
   if (!c.decisions.claude || !c.decisions.codex) throw new Error("convergeDecision: both agent decisions must be recorded");
   if (c.agree === false && (!state.gates["CONVERGE-tiebreak"] || state.gates["CONVERGE-tiebreak"].status !== "approved")) {

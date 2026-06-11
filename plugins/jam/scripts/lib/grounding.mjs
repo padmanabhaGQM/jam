@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { readState, writeState } from "./state.mjs";
 import { appendLedger } from "./ledger.mjs";
+import { evaluateGate } from "./gate.mjs";
 
 function nowIso(now) { return now ?? new Date().toISOString(); }
 
@@ -78,7 +79,7 @@ export function refuteClaim({ runDir: dir, id, now }) {
 export function convergeGrounding({ runDir: dir, options, openUnknowns, now }) {
   const state = readState(dir);
   requireGreenfield(state);
-  if (state.gates["GROUND-scope"].status !== "approved") {
+  if (!evaluateGate(state, "GROUND-scope").allowed) {
     throw new Error("convergeGrounding: the GROUND-scope gate must be approved before converging");
   }
   const g = state.grounding;

@@ -1,9 +1,11 @@
 ---
 description: Reject a gate — sends the work back instead of advancing
-argument-hint: "<gate-id> [reason]"
+argument-hint: "<gateId> --reason \"<text>\""
 allowed-tools: Bash(node:*)
 ---
 
-> **Scaffold — not yet implemented.** See design spec §5, §8.
+Run `jam reject <gateId> --reason "<text>"`.
 
-Reject gate `$ARGUMENTS`. Records the rejection + reason in `state.json` and the ledger, and holds the loop until the work is revised. Often paired with `/jam:steer` to say what to fix.
+Reject refuses a human gate with a recorded reason. The gate blocks until its artifact is re-produced, such as a digest, verdict, or plan, and only then can it be approved.
+
+Approval directly over a rejection is structurally impossible. The rejection and reason are permanent ledger facts, so the later approval has to be backed by fresh work rather than a silent override.

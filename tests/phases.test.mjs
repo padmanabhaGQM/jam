@@ -47,6 +47,16 @@ test("IMPLEMENT advances to FINISH only when all sprints are done", () => {
   s.phase = "IMPLEMENT";
   s.plan = { verifyCmd: "true", sprints: [{ id: "a", title: "t", status: "pending" }] };
   writeState(dir, s);
+  // honest phase history — the repair complete-prefix audit requires producers+approvals+advances
+  appendLedger(dir, { at: "t", type: "digest-rendered", gateId: "DIAGNOSE" });
+  appendLedger(dir, { at: "t", type: "approval", gateId: "DIAGNOSE" });
+  appendLedger(dir, { at: "t", type: "phase-advanced", from: "DIAGNOSE", to: "VERIFY" });
+  appendLedger(dir, { at: "t", type: "verification", gateId: "VERIFY", blockers: 0 });
+  appendLedger(dir, { at: "t", type: "approval", gateId: "VERIFY" });
+  appendLedger(dir, { at: "t", type: "phase-advanced", from: "VERIFY", to: "PLAN" });
+  appendLedger(dir, { at: "t", type: "plan-recorded" });
+  appendLedger(dir, { at: "t", type: "approval", gateId: "PLAN" });
+  appendLedger(dir, { at: "t", type: "phase-advanced", from: "PLAN", to: "IMPLEMENT" });
   assert.throws(() => advanceRun({ runDir: dir, now: "t1" }), /not all sprints done/);
   const tp = path.join(root, "transcript.jsonl");
   fs.writeFileSync(tp, "{}\n");

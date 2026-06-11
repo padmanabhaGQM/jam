@@ -4,6 +4,7 @@ import path from "node:path";
 import { readState, writeState, getGate } from "./state.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { activePointerPath } from "./paths.mjs";
+import { phaseOrderFor } from "./mode.mjs";
 
 function nowIso(now) {
   return now ?? new Date().toISOString();
@@ -27,11 +28,75 @@ export function cancelRun({ projectRoot, runDir: dir, now }) {
   return true;
 }
 
+export function rejectGate({ runDir: dir, gateId, reason, now }) {
+  const state = readState(dir);
+  const g = getGate(state, gateId);
+  if (g.mode !== "human") throw new Error(`cannot reject gate ${gateId}: rejection applies only to human gates (mode=${g.mode})`);
+  if (g.approveFrom === "contested") throw new Error(`cannot reject gate ${gateId}: re-rule the tiebreak instead (jam converge tiebreak --choose <option>)`);
+  if (g.approveFrom === "ratified") throw new Error(`cannot reject gate ${gateId}: irreversible-action gates are refused via 'jam ratify <id> --deny', not reject`);
+  if (!reason || !String(reason).trim()) throw new Error("rejectGate: --reason is required");
+  if (String(reason).length > 500) throw new Error("rejectGate: reason must be <= 500 characters");
+  g.status = "rejected";
+  g.rejectedReason = String(reason);
+  g.approvedBy = null;
+  g.approvedAt = null;
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "gate-rejected", gateId, reason: String(reason) });
+  return state;
+}
+
+export function rewindPhase({ runDir: dir, toPhase, confirm, now }) {
+  const state = readState(dir);
+  const order = phaseOrderFor(state.mode);
+  const cur = order.indexOf(state.phase), tgt = order.indexOf(toPhase);
+  if (tgt === -1) throw new Error(`rewindPhase: ${toPhase} is not a phase in mode ${state.mode ?? "repair"}`);
+  if (tgt >= cur) throw new Error(`rewindPhase: target must be earlier than the current phase (${state.phase})`);
+  if (confirm !== toPhase) throw new Error("rewindPhase: typed --confirm must equal the target phase (rewind invalidates approvals)");
+  const from = state.phase;
+  state.phase = toPhase;
+  for (const id of Object.keys(state.gates)) {
+    const phaseOfGate = order.find((p) => id === p || id.startsWith(p + "-"));
+    if (!phaseOfGate) continue;
+    const gi = order.indexOf(phaseOfGate);
+    if (gi > tgt) {
+      delete state.gates[id];
+    } else if (gi === tgt) {
+      state.gates[id].status = "pending";
+      state.gates[id].mode = "human";
+      state.gates[id].approvedBy = null;
+      state.gates[id].approvedAt = null;
+      delete state.gates[id].rejectedReason;
+    }
+  }
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "phase-rewound", from, to: toPhase });
+  return state;
+}
+
+const MODE_RANK = { "show-and-proceed": 0, human: 1 };
+export function dialGate({ runDir: dir, gateId, mode, confirm, now }) {
+  const state = readState(dir);
+  const g = getGate(state, gateId);
+  if (mode === "auto") throw new Error("dialGate: a gate cannot be dialed to auto - auto is earned by evidence, not granted");
+  if (!(mode in MODE_RANK)) throw new Error(`dialGate: unknown mode ${mode}`);
+  if (g.approveFrom === "ratified") throw new Error(`dialGate: ${gateId} guards an irreversible action - ratification gates are never dialable`);
+  if (g.approveFrom === "contested") throw new Error(`dialGate: ${gateId} is a tiebreak gate - it is satisfied only by a ruling (jam converge tiebreak), never dialable`);
+  if (gateId.startsWith("sprint-")) throw new Error(`dialGate: ${gateId} is a sprint evidence gate - never dialable`);
+  if (g.mode === "auto" && mode !== "human") throw new Error("dialGate: an auto gate can only be TIGHTENED to human");
+  const loosening = MODE_RANK[mode] < MODE_RANK[g.mode];
+  if (loosening && confirm !== gateId) throw new Error(`dialGate: loosening ${gateId} requires typed --confirm ${gateId}`);
+  const from = g.mode;
+  g.mode = mode;
+  writeState(dir, state);
+  appendLedger(dir, { at: nowIso(now), type: "gate-dialed", gateId, from, to: mode });
+  return state;
+}
+
 export function recordVerification({ runDir: dir, gateId, verdict, now }) {
   const state = readState(dir);
   const g = getGate(state, gateId);
-  if (g.mode !== "human") {
-    throw new Error(`cannot record verification for gate ${gateId}: verification applies only to human gates (mode=${g.mode})`);
+  if (g.mode !== "human" && g.mode !== "show-and-proceed") {
+    throw new Error(`cannot record verification for gate ${gateId}: verification applies only to human or show-and-proceed gates, not auto gates (mode=${g.mode})`);
   }
   if (g.approveFrom !== "verified") {
     const got = g.approveFrom === "rendered" ? "digest" : "plan";

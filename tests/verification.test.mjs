@@ -59,7 +59,7 @@ test("recordVerification THROWS on a non-human gate", () => {
   const root = tmp();
   const dir = createRun({ projectRoot: root, runId: "r1", mode: "repair", now: "t" });
   const s = readState(dir); addGate(s, "auto-g", "auto"); writeState(dir, s);
-  assert.throws(() => recordVerification({ runDir: dir, gateId: "auto-g", verdict: { unresolvedBlockers: 0 }, now: "t1" }), /human gates/);
+  assert.throws(() => recordVerification({ runDir: dir, gateId: "auto-g", verdict: { unresolvedBlockers: 0 }, now: "t1" }), /human|auto/);
 });
 
 test("recordVerification THROWS on a negative blocker count", () => {

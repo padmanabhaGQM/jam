@@ -1,6 +1,7 @@
 import { readState, writeState } from "./state.mjs";
 import { appendLedger } from "./ledger.mjs";
 import { runVerification } from "./evidence.mjs";
+import { evaluateGate } from "./gate.mjs";
 
 function nowIso(now) { return now ?? new Date().toISOString(); }
 
@@ -55,7 +56,7 @@ export function setCoverage({ runDir: dir, verifyCmd, checks, now }) {
 export function recordRedProof({ runDir: dir, cwd, now }) {
   const state = readState(dir);
   requireSpecify(state);
-  if (state.gates["SPECIFY-coverage"].status !== "approved") throw new Error("recordRedProof: the SPECIFY-coverage gate must be approved first");
+  if (!evaluateGate(state, "SPECIFY-coverage").allowed) throw new Error("recordRedProof: the SPECIFY-coverage gate must be approved first");
   if (!state.spec.verifyCmd) throw new Error("recordRedProof: no verifyCmd set");
   const result = runVerification(state.spec.verifyCmd, cwd ?? dir);
   state.spec.redProof = { exitCode: result.exitCode, at: nowIso(now) };
@@ -72,7 +73,7 @@ export function recordGameability({ runDir: dir, reviewer, author, survivingFind
   if (!Number.isInteger(survivingFindings) || survivingFindings < 0) throw new Error("recordGameability: a non-negative integer survivingFindings is required");
   const state = readState(dir);
   requireSpecify(state);
-  if (state.gates["SPECIFY-coverage"].status !== "approved") throw new Error("recordGameability: the SPECIFY-coverage gate must be approved first");
+  if (!evaluateGate(state, "SPECIFY-coverage").allowed) throw new Error("recordGameability: the SPECIFY-coverage gate must be approved first");
   state.spec.gameability = { reviewer, author: author ?? "claude", survivingFindings, findings: Array.isArray(findings) ? findings : [], at: nowIso(now) };
   const reopened = reopenSpec(state);   // a new verdict after certification invalidates it
   writeState(dir, state);
@@ -85,7 +86,7 @@ export function certifyVerifyCmd({ runDir: dir, cwd, now }) {
   const state = readState(dir);
   requireSpecify(state);
   const sp = state.spec;
-  if (state.gates["SPECIFY-coverage"].status !== "approved") throw new Error("certifyVerifyCmd: the SPECIFY-coverage gate must be approved first");
+  if (!evaluateGate(state, "SPECIFY-coverage").allowed) throw new Error("certifyVerifyCmd: the SPECIFY-coverage gate must be approved first");
   if (!sp.verifyCmd || !sp.verifyCmd.trim()) throw new Error("certifyVerifyCmd: no verifyCmd set");
   if (!Array.isArray(sp.checks) || sp.checks.length === 0) throw new Error("certifyVerifyCmd: no checks set");
   // (c) coverage: there must be >=1 G2 acceptance dimension, and every one has a check

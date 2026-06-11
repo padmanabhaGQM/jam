@@ -10,13 +10,14 @@ import os from "node:os";
 import { spawnSync } from "node:child_process";
 
 import { readActiveRunId, runsRoot, runDir } from "./lib/paths.mjs";
+import { phaseOrderFor } from "./lib/mode.mjs";
 import { codexStart, codexResume, codexWait } from "./lib/codex/exec.mjs";
 import { classifyTurn, sessionIdFromEventLog, locateTranscript, hasTurnCompleted } from "./lib/codex/session.mjs";
 import { isGitRepo, openTurnWorktree, reconcileTurnWorktree, discardTurnWorktree, gcWorktrees } from "./lib/worktree.mjs";
 import { readState, writeState } from "./lib/state.mjs";
 import { appendLedger } from "./lib/ledger.mjs";
 import { createRun, addGate, recordDigest, recordApproval, recordEvidence } from "./lib/actions.mjs";
-import { addSteering, cancelRun, recordVerification } from "./lib/control.mjs";
+import { addSteering, cancelRun, recordVerification, rejectGate, rewindPhase, dialGate } from "./lib/control.mjs";
 import { setGoal } from "./lib/goal.mjs";
 import { sharpenIntent, addClaim, refuteClaim, convergeGrounding } from "./lib/grounding.mjs";
 import { setShortlist, recordDecision, ruleTiebreak, convergeDecision } from "./lib/convergence.mjs";
@@ -29,6 +30,8 @@ import { auditRun } from "./lib/audit.mjs";
 import { reportRun, renderReport } from "./lib/report.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
 import { shouldSweepAbandonedWorktree } from "./lib/worktree-sweep.mjs";
+import { evaluateDoctor, gatherProbes, renderDoctor } from "./lib/doctor.mjs";
+import { deriveNextAction } from "./lib/resume.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -88,7 +91,7 @@ function sweepAbandonedWorktrees(dir) {
 
 function requireActiveRun(cwd) {
   const runId = readActiveRunId(cwd);
-  if (!runId) fail("no active jam run in this project (run `jam start <topic>` first)");
+  if (!runId) fail(`no active jam run in this project — start one with 'jam diagnose "<topic>" --goal <file>' (repair) or 'jam start "<topic>" --mode greenfield'; see 'jam report --all' for past runs`);
   const dir = runDir(cwd, runId);
   try { sweepAbandonedWorktrees(dir); } catch {}
   return { runId, dir };
@@ -113,9 +116,13 @@ function cmdStart(cwd, positional, flags) {
   }
 }
 
-function cmdStatus(cwd) {
-  const { runId, dir } = requireActiveRun(cwd);
-  const state = readState(dir);
+function cmdDoctor(cwd) {
+  const r = evaluateDoctor(gatherProbes(cwd));
+  process.stdout.write(renderDoctor(r));
+  if (!r.ok) process.exit(1);
+}
+
+function renderStatus(state, runId) {
   const lines = [`run ${runId} — phase ${state.phase}`];
   if (state.mode === "greenfield") {
     const g = state.grounding ?? {};
@@ -162,7 +169,23 @@ function cmdStatus(cwd) {
   for (const a of state.actions ?? []) {
     lines.push(`  action ${a.id}: ${a.type ?? "?"} [${a.irreversible ? "HARD-BLOCK" : "ok"}] ${a.status}${a.reasons?.length ? " — " + a.reasons.join("; ") : ""}`);
   }
-  process.stdout.write(lines.join("\n") + "\n");
+  return lines.join("\n") + "\n";
+}
+
+function cmdStatus(cwd) {
+  const { runId, dir } = requireActiveRun(cwd);
+  const state = readState(dir);
+  process.stdout.write(renderStatus(state, runId));
+}
+
+function cmdResume(cwd) {
+  const id = readActiveRunId(cwd);
+  if (!id) { process.stdout.write("no active run — past runs:\n"); return cmdReport(cwd, [], { all: undefined }); }
+  const dir = runDir(cwd, id);
+  const st = readState(dir);
+  process.stdout.write(renderStatus(st, id));
+  const next = deriveNextAction(st);
+  process.stdout.write(`\nnext: ${next.message}\n`);
 }
 
 function cmdRenderDigest(cwd, positional, flags) {
@@ -193,6 +216,49 @@ function cmdApprove(cwd, positional) {
     return fail(e.message);
   }
   process.stdout.write(`gate ${gateId} approved\n`);
+}
+
+function cmdReject(cwd, positional, flags) {
+  const gateId = positional[0];
+  if (!gateId || !flags.reason) return fail('usage: jam reject <gateId> --reason "<text>"');
+  const { dir } = requireActiveRun(cwd);
+  try {
+    rejectGate({ runDir: dir, gateId, reason: flags.reason });
+  } catch (e) {
+    return fail(e.message);
+  }
+  const st = readState(dir);
+  const order = phaseOrderFor(st.mode);
+  const gatePhase = order.find((p) => gateId === p || gateId.startsWith(p + "-"));
+  if (gatePhase && order.indexOf(gatePhase) < order.indexOf(st.phase)) {
+    process.stdout.write(`gate ${gateId} rejected — it belongs to the earlier phase ${gatePhase}: re-producing may require 'jam rewind ${gatePhase} --confirm ${gatePhase}' first (phase-bound greenfield producers); repair digest/plan producers can run from any phase\n`);
+  } else {
+    process.stdout.write(`gate ${gateId} rejected — re-produce its artifact, then approve\n`);
+  }
+}
+
+function cmdRewind(cwd, positional, flags) {
+  const toPhase = positional[0];
+  if (!toPhase || !flags.confirm) return fail("usage: jam rewind <phase> --confirm <phase>   (rewind invalidates approvals)");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    rewindPhase({ runDir: dir, toPhase, confirm: flags.confirm });
+  } catch (e) {
+    return fail(e.message);
+  }
+  process.stdout.write(`rewound to ${toPhase} — later-phase gates re-armed; re-produce artifacts and re-approve. (The working tree is NOT rolled back — that is git's job.)\n`);
+}
+
+function cmdDial(cwd, positional, flags) {
+  const gateId = positional[0];
+  if (!gateId || !flags.mode) return fail("usage: jam dial <gateId> --mode <human|show-and-proceed> [--confirm <gateId>]");
+  const { dir } = requireActiveRun(cwd);
+  try {
+    dialGate({ runDir: dir, gateId, mode: flags.mode, confirm: flags.confirm });
+  } catch (e) {
+    return fail(e.message);
+  }
+  process.stdout.write(`gate ${gateId} dialed to ${flags.mode}\n`);
 }
 
 function cmdAddGate(cwd, positional, flags) {
@@ -554,7 +620,7 @@ async function cmdCodexRun(cwd, positional, flags) {
     const { dir } = requireActiveRun(cwd);
     openTurn({ runDir: dir, sprintId: flags.sprint, isolated: false });
     appendLedger(dir, { at: new Date().toISOString(), type: "turn-unisolated", sprintId: flags.sprint });
-    process.stdout.write("turn isolation OFF (not a git repo) - Codex will edit the working tree in place\n");
+    process.stdout.write("turn isolation OFF (not a git repo) - Codex will edit the working tree in place. Run 'jam doctor' for setup guidance.\n");
   }
 
   fs.mkdirSync(outDir, { recursive: true });
@@ -608,8 +674,8 @@ async function cmdCodexRun(cwd, positional, flags) {
   const r = await codexWait({ eventLog, lastMsg, timeoutMs });
   process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? "(none)"}\nout-dir: ${outDir}\n`);
   if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
-  else if (flags.sprint && isolated) process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). When it completes, run: jam reconcile --sprint ${flags.sprint}\n`);
-  else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). Resume with: jam codex-resume ${r.sessionId ?? "<id>"} --prompt-file <reply>\n`);
+  else if (flags.sprint && isolated) process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). When it completes, run: jam reconcile --sprint ${flags.sprint}. If this persists, run 'jam doctor' — the Codex CLI may be missing or unauthenticated.\n`);
+  else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). Resume with: jam codex-resume ${r.sessionId ?? "<id>"} --prompt-file <reply>. If this persists, run 'jam doctor' — the Codex CLI may be missing or unauthenticated.\n`);
   maybeBindSprint({ cwd, flags, status: r.status, sessionId: r.sessionId });
   if (flags.sprint && isolated && r.status === "completed") {
     reconcileActiveTurn(cwd, flags.sprint);
@@ -794,6 +860,8 @@ async function main() {
   const { positional, flags } = parseFlags(rest);
 
   switch (sub) {
+    case "doctor":
+      return cmdDoctor(cwd);
     case "start":
       return cmdStart(cwd, positional, flags);
     case "ground":
@@ -806,10 +874,18 @@ async function main() {
       return cmdBuild(cwd, positional, flags);
     case "status":
       return cmdStatus(cwd);
+    case "resume":
+      return cmdResume(cwd);
     case "render-digest":
       return cmdRenderDigest(cwd, positional, flags);
     case "approve":
       return cmdApprove(cwd, positional);
+    case "reject":
+      return cmdReject(cwd, positional, flags);
+    case "rewind":
+      return cmdRewind(cwd, positional, flags);
+    case "dial":
+      return cmdDial(cwd, positional, flags);
     case "add-gate":
       return cmdAddGate(cwd, positional, flags);
     case "evidence":
