@@ -156,6 +156,23 @@ test("KEY RED-TEAM: a BUILD sprint started before BUILD-plan approval fails the 
   assert.ok(r.failures.some((f) => /started before the BUILD-plan was approved/.test(f)));
 });
 
+test("KEY RED-TEAM: a BUILD sprint started before BUILD-plan delegation fails the audit", () => {
+  const led = gfLedger().filter((e) => !(e.type === "approval" && e.gateId === "BUILD-plan"));
+  const planIdx = led.findIndex((e) => e.type === "plan-recorded");
+  const startIdx = led.findIndex((e) => e.type === "sprint-started" && e.sprintId === "b1");
+  led.splice(startIdx + 1, 0, { type: "gate-dialed", gateId: "BUILD-plan", from: "human", to: "show-and-proceed" });
+  const st = gfState();
+  st.gates["BUILD-plan"] = { mode: "show-and-proceed", status: "planned", approveFrom: "planned" };
+  const r = evaluateAudit({ ledger: led, state: st, transcriptExists: yes });
+  assert.ok(planIdx < startIdx);
+  assert.ok(r.failures.some((f) => /started before the BUILD-plan was approved/.test(f)));
+
+  const honest = gfLedger().filter((e) => !(e.type === "approval" && e.gateId === "BUILD-plan"));
+  honest.splice(planIdx + 1, 0, { type: "gate-dialed", gateId: "BUILD-plan", from: "human", to: "show-and-proceed" });
+  const ok = evaluateAudit({ ledger: honest, state: st, transcriptExists: yes });
+  assert.equal(ok.ok, true, ok.failures.join("; "));
+});
+
 test("KEY RED-TEAM: a planned state sprint outside the approved build plan fails the audit", () => {
   const led = gfLedger().filter((e) => !(e.type === "phase-advanced" && e.from === "BUILD" && e.to === "FINISH"));
   const st = { ...gfState(), phase: "BUILD" };

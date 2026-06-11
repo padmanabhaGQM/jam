@@ -172,7 +172,11 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     const planIdx = latestProducerFor("BUILD-plan", "plan-recorded", buildFloor, buildBefore);
     const buildAuth = authFor("BUILD-plan", buildFloor, buildBefore);
     const apprIdx = buildAuth.appr;
-    const buildAuthorized = planIdx !== -1 && ((apprIdx !== -1 && apprIdx > planIdx) || (buildAuth.dialDown !== -1 && buildAuth.dialDown > buildAuth.dialUp));
+    const delegated = buildAuth.dialDown !== -1 && buildAuth.dialDown > buildAuth.dialUp;
+    const approvalAuthIdx = apprIdx !== -1 && apprIdx > planIdx ? apprIdx : -1;
+    const delegationAuthIdx = delegated && planIdx !== -1 ? Math.max(planIdx, buildAuth.dialDown) : -1;
+    const buildAuthIdx = [approvalAuthIdx, delegationAuthIdx].filter((idx) => idx !== -1).sort((a, b) => a - b)[0] ?? -1;
+    const buildAuthorized = planIdx !== -1 && buildAuthIdx !== -1;
     const cert = [...ledger].reverse().find((x) => x.type === "spec-certified");
     if (cert && typeof cert.verifyCmd === "string" && state.spec && cert.verifyCmd !== state.spec.verifyCmd) {
       failures.push("ordering: state.spec.verifyCmd does not match the certified verifyCmd in the ledger");
@@ -192,15 +196,15 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     if ((finishIdx !== -1 || state.phase === "FINISH") && !allSprintsDone(state)) {
       failures.push("ordering: greenfield BUILD->FINISH requires all build sprints done");
     }
-    let lastBuildApprIdx = -1;
-    ledger.forEach((x, xi) => { if (xi > buildFloor && x.type === "approval" && x.gateId === "BUILD-plan") lastBuildApprIdx = xi; });
-    if (lastBuildApprIdx !== -1) {
+    if (buildAuthIdx !== -1) {
       ledger.forEach((x, xi) => {
-        if (xi > planEpoch && x.type === "sprint-started" && xi < lastBuildApprIdx) {
+        if (xi > planEpoch && x.type === "sprint-started" && xi < buildAuthIdx) {
           failures.push(`ordering: sprint ${x.sprintId} started before the BUILD-plan was approved`);
         }
       });
     }
+    let lastBuildApprIdx = -1;
+    ledger.forEach((x, xi) => { if (xi > buildFloor && x.type === "approval" && x.gateId === "BUILD-plan") lastBuildApprIdx = xi; });
     if (lastBuildApprIdx !== -1) {
       const mutatedAfter = ledger.findIndex((x, xi) => xi > lastBuildApprIdx && x.type === "plan-recorded");
       if (mutatedAfter !== -1) failures.push("ordering: build plan was re-recorded after its BUILD-plan approval without re-approval");
@@ -300,7 +304,7 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
         failures.push(`provenance: sprint ${sp.id} is ${sp.status} but has no valid provenance`);
       } else if (sp.provenance === "promoted") {
         if (!promotions.some((p) => p.id === sp.id)) failures.push(`provenance: promoted sprint ${sp.id} has no promotion decision`);
-        const promIdx = ledger.findIndex((x) => x.type === "sprint-promoted" && x.id === sp.id);
+        const promIdx = ledger.findIndex((x, xi) => xi > planEpoch && x.type === "sprint-promoted" && x.id === sp.id);
         if (promIdx === -1) {
           failures.push(`provenance: promoted sprint ${sp.id} has no sprint-promoted ledger entry`);
         } else {

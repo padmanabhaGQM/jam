@@ -290,3 +290,33 @@ test("AUDIT plan epoch: old sprint-done cannot satisfy the current plan", () => 
   const fail = evaluateAudit({ ledger: staleOnly, state, transcriptExists: () => true });
   assert.ok(fail.failures.some((f) => /sprint fix-1 is done in state but has no sprint-done/.test(f)));
 });
+
+test("AUDIT plan epoch: stale sprint-promoted cannot satisfy a promoted sprint in the current plan", () => {
+  const sp = { id: "fix-1", status: "done", provenance: "promoted", codexSessions: [{ transcriptPath: "/x" }] };
+  const state = {
+    mode: "repair",
+    phase: "IMPLEMENT",
+    plan: { verifyCmd: "true", sprints: [sp] },
+    promotions: [{ id: "fix-1", discoveredBy: "orchestrator", reason: "r", decidedBy: "orchestrator", at: "t" }],
+  };
+  const forged = [
+    { type: "digest-rendered", gateId: "DIAGNOSE" }, { type: "approval", gateId: "DIAGNOSE" },
+    { type: "phase-advanced", from: "DIAGNOSE", to: "VERIFY" },
+    { type: "verification", gateId: "VERIFY", blockers: 0 }, { type: "approval", gateId: "VERIFY" },
+    { type: "phase-advanced", from: "VERIFY", to: "PLAN" },
+    { type: "sprint-promoted", id: "fix-1", reason: "r" },
+    { type: "plan-recorded", sprintIds: ["fix-1"] },
+    { type: "approval", gateId: "PLAN" },
+    { type: "phase-advanced", from: "PLAN", to: "IMPLEMENT" },
+    { type: "sprint-started", sprintId: "fix-1" }, { type: "codex-bound", sprintId: "fix-1" },
+    { type: "evidence", sprintId: "fix-1", gateId: "sprint-fix-1", exitCode: 0 }, { type: "sprint-done", sprintId: "fix-1" },
+  ];
+  const r = evaluateAudit({ ledger: forged, state, transcriptExists: () => true });
+  assert.ok(r.failures.some((f) => /promoted sprint fix-1 has no sprint-promoted ledger entry/.test(f)));
+
+  const honest = [...forged];
+  const startIdx = honest.findIndex((e) => e.type === "sprint-started" && e.sprintId === "fix-1");
+  honest.splice(startIdx, 0, { type: "sprint-promoted", id: "fix-1", reason: "r" });
+  const ok = evaluateAudit({ ledger: honest, state, transcriptExists: () => true });
+  assert.equal(ok.ok, true, ok.failures.join("; "));
+});
