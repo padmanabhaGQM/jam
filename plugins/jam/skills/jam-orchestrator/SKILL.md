@@ -201,7 +201,7 @@ Work the sprint list **one at a time, in order**. Each sprint is gated by the ru
      --timeout 600000 \
      --out-dir <run>/codex/<id>
    ```
-   The sprint cadence is `--start → codex-run --sprint (runs in an isolated worktree) → jam reconcile --sprint → --verify → --done`. `buildSprintPrompt` instructs Codex to use `superpowers:test-driven-development`, implement **exactly** this sprint, honor active steering directives, and return exact evidence. Passing `--sprint <id>` binds this Codex session (id + transcript) to the sprint — the authorship record step 6 requires. Resume with `jam codex-resume <sessionId> --sprint <id>` as needed. The **Codex-hang protocol** (never-kill + live-thread reconciliation) applies to every engine call here; a timed-out turn is reconciled, not lost, once it completes.
+   The sprint cadence is `--start → codex-run --sprint (runs in an isolated worktree) → jam reconcile --sprint → --verify → --done`. `buildSprintPrompt` instructs Codex to use `superpowers:test-driven-development`, implement **exactly** this sprint, honor active steering directives, and return exact evidence. Passing `--sprint <id>` binds this Codex session (id + transcript) to the sprint — the authorship record step 6 requires. A timed-out ISOLATED sprint turn is not resumed via `codex-resume` — wait for the turn (never killed) and run `jam reconcile --sprint <id>`, or open a fresh superseding `jam codex-run --sprint <id>`. The **Codex-hang protocol** (never-kill + live-thread reconciliation) applies to every engine call here; a timed-out turn is reconciled, not lost, once it completes.
 
 3. **Reconcile the isolated turn.**
    ```bash

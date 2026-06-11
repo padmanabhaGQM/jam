@@ -34,6 +34,24 @@ test("openTurnWorktree snapshots dirty+untracked into a baseline and isolates th
   assert.equal(fs.readFileSync(path.join(root, "code.txt"), "utf8"), "v2-dirty\n");
 });
 
+test("openTurnWorktree rejects a JAM_WORKTREE_ROOT symlink that physically points inside the repo", () => {
+  const { root } = gitRepo();
+  const link = path.join(os.tmpdir(), `jam-wt-link-${process.pid}-${Date.now()}`);
+  fs.symlinkSync(root, link, "dir");
+  const prior = process.env.JAM_WORKTREE_ROOT;
+  process.env.JAM_WORKTREE_ROOT = link;
+  try {
+    assert.throws(
+      () => openTurnWorktree({ repoRoot: root, sprintId: "s1", token: "s1#1" }),
+      /JAM_WORKTREE_ROOT must be OUTSIDE the repo/
+    );
+  } finally {
+    if (prior === undefined) delete process.env.JAM_WORKTREE_ROOT;
+    else process.env.JAM_WORKTREE_ROOT = prior;
+    fs.rmSync(link, { force: true });
+  }
+});
+
 test("reconcileTurnWorktree applies the turn's net diff to the main tree; discard removes the worktree", () => {
   const { root } = gitRepo();
   fs.writeFileSync(path.join(root, "code.txt"), "v2-dirty\n");

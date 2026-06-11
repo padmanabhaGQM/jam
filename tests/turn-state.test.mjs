@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createRun } from "../plugins/jam/scripts/lib/actions.mjs";
+import { createRun, recordEvidence } from "../plugins/jam/scripts/lib/actions.mjs";
 import { readState, writeState, validateState } from "../plugins/jam/scripts/lib/state.mjs";
 import { bindCodexSession, openTurn, startSprint, verifySprint, finishSprint } from "../plugins/jam/scripts/lib/sprint.mjs";
 import { fakeCodexHome } from "./helpers/codex.mjs";
@@ -48,6 +48,18 @@ test("verifySprint and finishSprint refuse while an open turn exists", () => {
   openTurn({ runDir: fallback.dir, sprintId: "s1", isolated: false, now: "t2" });
   verifySprint({ runDir: fallback.dir, sprintId: "s1", cwd: fallback.root });
   assert.throws(() => finishSprint({ runDir: fallback.dir, sprintId: "s1" }), /no Codex-authored session/);
+});
+
+test("recordEvidence refuses plan sprint evidence while an isolated turn is open", () => {
+  const { root, dir } = atImplement();
+  startSprint({ runDir: dir, sprintId: "s1", now: "t1" });
+  openTurn({ runDir: dir, sprintId: "s1", worktreePath: "/w/1", baselineRef: "aaa", now: "t2" });
+
+  assert.throws(
+    () => recordEvidence({ runDir: dir, gateId: "sprint-s1", sprintId: "s1", command: "true", cwd: root, now: "t3" }),
+    /cannot record evidence for sprint s1: an un-reconciled isolated turn exists/
+  );
+  assert.equal(readState(dir).gates["sprint-s1"].status, "pending");
 });
 
 test("validateState rejects a malformed sprint.turn", () => {

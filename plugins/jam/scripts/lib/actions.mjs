@@ -72,8 +72,11 @@ export function recordEvidence({ runDir: dir, gateId, sprintId, command, cwd, no
   if (g.mode !== "auto") {
     throw new Error(`cannot record evidence for gate ${gateId}: evidence applies only to auto gates (mode=${g.mode})`);
   }
-  const isPlanSprintGate = (state.plan?.sprints ?? []).some((s) => `sprint-${s.id}` === gateId);
-  if (isPlanSprintGate && command !== state.plan.verifyCmd) {
+  const planSprint = (state.plan?.sprints ?? []).find((s) => `sprint-${s.id}` === gateId);
+  if (planSprint && planSprint.turn && planSprint.turn.status === "open" && planSprint.turn.isolated !== false) {
+    throw new Error(`cannot record evidence for sprint ${planSprint.id}: an un-reconciled isolated turn exists — run 'jam reconcile --sprint ${planSprint.id}' first`);
+  }
+  if (planSprint && command !== state.plan.verifyCmd) {
     throw new Error(`gate ${gateId} belongs to a plan sprint; verify it with the global verifyCmd via \`jam sprint <id> --verify\`, not arbitrary evidence`);
   }
   const result = runVerification(command, cwd);

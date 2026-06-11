@@ -27,6 +27,7 @@ import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession, openTurn } from "./lib/sprint.mjs";
 import { auditRun } from "./lib/audit.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
+import { shouldSweepAbandonedWorktree } from "./lib/worktree-sweep.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -68,8 +69,7 @@ function sweepAbandonedWorktrees(dir) {
   try { s = readState(dir); } catch { return; }
   const left = [];
   for (const w of s.abandonedWorktrees ?? []) {
-    const done = !!(w.eventLog && hasTurnCompleted(w.eventLog));
-    if (!done && pidAlive(w.pid)) { left.push(w); continue; }
+    if (!shouldSweepAbandonedWorktree(w, { pidAlive, hasTurnCompleted })) { left.push(w); continue; }
     if (!w.repoRoot || !w.worktreePath) continue;
     const r = discardTurnWorktree({ repoRoot: w.repoRoot, worktreePath: w.worktreePath });
     if (!r.removed && fs.existsSync(w.worktreePath)) left.push(w);

@@ -8,6 +8,18 @@ function git(repoRoot, args, opts = {}) {
   return { code: r.status === null ? -1 : r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 function slug(token) { return token.replace(/[^a-z0-9]+/gi, "-"); }
+function physicalPathForPossiblyMissing(p) {
+  let cur = path.resolve(p);
+  const missing = [];
+  while (!fs.existsSync(cur)) {
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    missing.unshift(path.basename(cur));
+    cur = parent;
+  }
+  const realBase = fs.existsSync(cur) ? fs.realpathSync.native(cur) : cur;
+  return path.join(realBase, ...missing);
+}
 
 export function isGitRepo(root) {
   return git(root, ["rev-parse", "--is-inside-work-tree"]).stdout.trim() === "true";
@@ -31,6 +43,10 @@ export function openTurnWorktree({ repoRoot, sprintId, token, runId, maxBlobByte
   const max = (maxBlobBytes ?? Number(process.env.JAM_WORKTREE_MAX_BLOB)) || 5 * 1024 * 1024;  // () — no mixed ??/||
   const tmpIndex = path.join(os.tmpdir(), `jam-idx-${slug(token)}-${process.pid}`);
   const env = { ...process.env, GIT_INDEX_FILE: tmpIndex };
+  const scratch = path.resolve(process.env.JAM_WORKTREE_ROOT || path.join(os.tmpdir(), "jam-worktrees"));
+  const realRepo = fs.realpathSync.native(repoRoot);
+  const physicalScratch = physicalPathForPossiblyMissing(scratch);
+  if (physicalScratch === realRepo || physicalScratch.startsWith(realRepo + path.sep)) throw new Error("openTurnWorktree: JAM_WORKTREE_ROOT must be OUTSIDE the repo (structural isolation)");
   try {
     // Exclude .jam/ BEFORE the baseline `add -A`, so prior turns' scratch/worktrees are never captured.
     // Keep jam's own internals out of the baseline AND out of any future reconcile (a Codex turn that runs
@@ -49,21 +65,25 @@ export function openTurnWorktree({ repoRoot, sprintId, token, runId, maxBlobByte
     // Worktree lives OUTSIDE the repo (structural isolation: the main tree is not reachable via `../` from the
     // turn cwd, so safety does not depend on the Codex sandbox). git shares .git objects via the gitdir link,
     // so large binaries are not duplicated even across filesystems. Override the scratch root with JAM_WORKTREE_ROOT.
-    const scratch = path.resolve(process.env.JAM_WORKTREE_ROOT || path.join(os.tmpdir(), "jam-worktrees"));
-    if (scratch === repoRoot || scratch.startsWith(repoRoot + path.sep)) throw new Error("openTurnWorktree: JAM_WORKTREE_ROOT must be OUTSIDE the repo (structural isolation)");
     const namespace = runId ? slug(runId) : slug(path.basename(repoRoot));
     const wt = path.join(scratch, `${namespace}-${slug(token)}`);  // runId-namespaced: tokens like fix-1#1 repeat across runs
     fs.mkdirSync(path.dirname(wt), { recursive: true });
     if (!baselineRef) throw new Error("openTurnWorktree: failed to create baseline commit");
     const add = git(repoRoot, ["worktree", "add", "--no-checkout", wt, baselineRef]);
     if (add.code !== 0) throw new Error(`openTurnWorktree: git worktree add failed: ${add.stderr}`);
-    const big = largeTrackedBlobs(repoRoot, baselineRef, max);
-    if (git(wt, ["sparse-checkout", "init", "--no-cone"]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout init failed");
-    if (git(wt, ["sparse-checkout", "set", "/*", ...big.map((b) => `!${b}`)]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout set failed");
-    const co = git(wt, ["checkout"]);
-    if (co.code !== 0) throw new Error(`openTurnWorktree: worktree checkout failed: ${co.stderr}`);
-    const headAtOpen = git(repoRoot, ["rev-parse", "HEAD"]).stdout.trim();   // detect a deliberate shared-ref move at reconcile
-    return { worktreePath: wt, baselineRef, repoRoot, headAtOpen };          // repoRoot = normalized git top-level
+    try {
+      const big = largeTrackedBlobs(repoRoot, baselineRef, max);
+      if (git(wt, ["sparse-checkout", "init", "--no-cone"]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout init failed");
+      if (git(wt, ["sparse-checkout", "set", "/*", ...big.map((b) => `!${b}`)]).code !== 0) throw new Error("openTurnWorktree: sparse-checkout set failed");
+      const co = git(wt, ["checkout"]);
+      if (co.code !== 0) throw new Error(`openTurnWorktree: worktree checkout failed: ${co.stderr}`);
+      const headAtOpen = git(repoRoot, ["rev-parse", "HEAD"]).stdout.trim();   // detect a deliberate shared-ref move at reconcile
+      return { worktreePath: wt, baselineRef, repoRoot, headAtOpen };          // repoRoot = normalized git top-level
+    } catch (e) {
+      git(repoRoot, ["worktree", "remove", "--force", wt]);
+      git(repoRoot, ["worktree", "prune"]);
+      throw e;
+    }
   } finally {
     try { fs.rmSync(tmpIndex, { force: true }); } catch {}
   }
@@ -99,10 +119,16 @@ export function reconcileTurnWorktree({ repoRoot, worktreePath, baselineRef, hea
   const pd = git(worktreePath, ["diff", "--cached", "--binary", baselineRef, ...RECONCILE_EXCLUDES]);
   if (pd.code !== 0) return { applied: false, error: "git diff (patch) failed" };
   const patch = pd.stdout;
-  const check = spawnSync("git", ["-C", repoRoot, "apply", "--check"], { input: patch, encoding: "utf8" });
-  if ((check.status ?? -1) !== 0) return { applied: false, drift: true, stderr: check.stderr ?? "" };
-  const apply = spawnSync("git", ["-C", repoRoot, "apply"], { input: patch, encoding: "utf8" });
-  if ((apply.status ?? -1) !== 0) return { applied: false, error: apply.stderr ?? "" };
+  const patchFile = path.join(os.tmpdir(), `jam-patch-${process.pid}-${Date.now()}.diff`);
+  try {
+    fs.writeFileSync(patchFile, patch);
+    const check = spawnSync("git", ["-C", repoRoot, "apply", "--check", patchFile], { encoding: "utf8" });
+    if ((check.status ?? -1) !== 0) return { applied: false, drift: true, stderr: check.stderr ?? "" };
+    const apply = spawnSync("git", ["-C", repoRoot, "apply", patchFile], { encoding: "utf8" });
+    if ((apply.status ?? -1) !== 0) return { applied: false, error: apply.stderr ?? "" };
+  } finally {
+    try { fs.rmSync(patchFile, { force: true }); } catch {}
+  }
   return { applied: true };
 }
 
