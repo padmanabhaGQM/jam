@@ -29,6 +29,7 @@ import { auditRun } from "./lib/audit.mjs";
 import { reportRun, renderReport } from "./lib/report.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
 import { shouldSweepAbandonedWorktree } from "./lib/worktree-sweep.mjs";
+import { evaluateDoctor, gatherProbes, renderDoctor } from "./lib/doctor.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -88,7 +89,7 @@ function sweepAbandonedWorktrees(dir) {
 
 function requireActiveRun(cwd) {
   const runId = readActiveRunId(cwd);
-  if (!runId) fail("no active jam run in this project (run `jam start <topic>` first)");
+  if (!runId) fail(`no active jam run in this project — start one with 'jam diagnose "<topic>" --goal <file>' (repair) or 'jam start "<topic>" --mode greenfield'; see 'jam report --all' for past runs`);
   const dir = runDir(cwd, runId);
   try { sweepAbandonedWorktrees(dir); } catch {}
   return { runId, dir };
@@ -111,6 +112,12 @@ function cmdStart(cwd, positional, flags) {
   } else {
     process.stdout.write(`started jam run ${runId} (phase ALIGN, gate ALIGN: pending)\n`);
   }
+}
+
+function cmdDoctor(cwd) {
+  const r = evaluateDoctor(gatherProbes(cwd));
+  process.stdout.write(renderDoctor(r));
+  if (!r.ok) process.exit(1);
 }
 
 function cmdStatus(cwd) {
@@ -554,7 +561,7 @@ async function cmdCodexRun(cwd, positional, flags) {
     const { dir } = requireActiveRun(cwd);
     openTurn({ runDir: dir, sprintId: flags.sprint, isolated: false });
     appendLedger(dir, { at: new Date().toISOString(), type: "turn-unisolated", sprintId: flags.sprint });
-    process.stdout.write("turn isolation OFF (not a git repo) - Codex will edit the working tree in place\n");
+    process.stdout.write("turn isolation OFF (not a git repo) - Codex will edit the working tree in place. Run 'jam doctor' for setup guidance.\n");
   }
 
   fs.mkdirSync(outDir, { recursive: true });
@@ -608,8 +615,8 @@ async function cmdCodexRun(cwd, positional, flags) {
   const r = await codexWait({ eventLog, lastMsg, timeoutMs });
   process.stdout.write(`status: ${r.status}\nsession: ${r.sessionId ?? "(none)"}\nout-dir: ${outDir}\n`);
   if (r.status === "completed") process.stdout.write(`message:\n${r.lastMessage ?? ""}\n`);
-  else if (flags.sprint && isolated) process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). When it completes, run: jam reconcile --sprint ${flags.sprint}\n`);
-  else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). Resume with: jam codex-resume ${r.sessionId ?? "<id>"} --prompt-file <reply>\n`);
+  else if (flags.sprint && isolated) process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). When it completes, run: jam reconcile --sprint ${flags.sprint}. If this persists, run 'jam doctor' — the Codex CLI may be missing or unauthenticated.\n`);
+  else process.stdout.write(`Codex turn did not complete within ${timeoutMs}ms. It may still be running (NOT killed). Resume with: jam codex-resume ${r.sessionId ?? "<id>"} --prompt-file <reply>. If this persists, run 'jam doctor' — the Codex CLI may be missing or unauthenticated.\n`);
   maybeBindSprint({ cwd, flags, status: r.status, sessionId: r.sessionId });
   if (flags.sprint && isolated && r.status === "completed") {
     reconcileActiveTurn(cwd, flags.sprint);
@@ -794,6 +801,8 @@ async function main() {
   const { positional, flags } = parseFlags(rest);
 
   switch (sub) {
+    case "doctor":
+      return cmdDoctor(cwd);
     case "start":
       return cmdStart(cwd, positional, flags);
     case "ground":
