@@ -9,7 +9,7 @@ import path from "node:path";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
 
-import { readActiveRunId, runDir } from "./lib/paths.mjs";
+import { readActiveRunId, runsRoot, runDir } from "./lib/paths.mjs";
 import { codexStart, codexResume, codexWait } from "./lib/codex/exec.mjs";
 import { classifyTurn, sessionIdFromEventLog, locateTranscript, hasTurnCompleted } from "./lib/codex/session.mjs";
 import { isGitRepo, openTurnWorktree, reconcileTurnWorktree, discardTurnWorktree, gcWorktrees } from "./lib/worktree.mjs";
@@ -26,6 +26,7 @@ import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession, openTurn } from "./lib/sprint.mjs";
 import { auditRun } from "./lib/audit.mjs";
+import { reportRun, renderReport } from "./lib/report.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
 import { shouldSweepAbandonedWorktree } from "./lib/worktree-sweep.mjs";
 
@@ -742,6 +743,50 @@ function cmdAudit(cwd) {
   return fail("audit: FAIL\n" + failures.map((f) => "  - " + f).join("\n"));
 }
 
+function cmdReport(cwd, positional, flags) {
+  if ("all" in flags) {                                       // parseFlags stores bare flags as undefined — presence check
+    const rootDir = runsRoot(cwd);
+    let entries = [];
+    try { entries = fs.readdirSync(rootDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch {}
+    for (const id of entries.sort()) {
+      const rep = reportRun({ runDir: runDir(cwd, id) });
+      if (rep.error) { process.stdout.write(`${id}  (unreadable)\n`); continue; }
+      const audit = rep.audit === null ? "-" : rep.audit.error ? "-" : rep.audit.ok ? "PASS" : "FAIL";
+      process.stdout.write(`${id}  ${rep.run.mode}  ${rep.run.phase ?? "?"}  sprints ${rep.totals.done}/${rep.totals.sprints}  reviews ${rep.reviews.rounds.length}  audit ${audit}\n`);
+    }
+    return;
+  }
+  let dir;
+  if (positional[0]) {
+    dir = runDir(cwd, positional[0]);
+    if (!fs.existsSync(dir)) return fail(`no such run: ${positional[0]}`);
+  } else {
+    // STRICT read-only: do NOT use requireActiveRun (its abandoned-worktree sweep can WRITE state.json).
+    const id = readActiveRunId(cwd);
+    if (!id) return fail("no active jam run in this project (run `jam report <runId>` or start a run)");
+    dir = runDir(cwd, id);
+    if (!fs.existsSync(dir)) return fail(`active run ${id} has no run directory`);
+  }
+  const rep = reportRun({ runDir: dir });
+  if (rep.error) return fail(rep.error);
+  process.stdout.write("json" in flags ? JSON.stringify(rep, null, 2) + "\n" : renderReport(rep));
+}
+function cmdReviewRound(cwd, positional, flags) {
+  const phase = flags.phase, round = Number(flags.round), blockers = Number(flags.blockers);
+  if (!["VERIFY", "SLICE"].includes(phase)) return fail("usage: jam review-round --phase VERIFY|SLICE --round <n> --blockers <k> [--notes <text>]");
+  if (!Number.isInteger(round) || round < 1) return fail("review-round: --round must be a positive integer");
+  if (!Number.isInteger(blockers) || blockers < 0) return fail("review-round: --blockers must be a non-negative integer");
+  if (flags.notes && String(flags.notes).length > 500) return fail("review-round: --notes must be ≤ 500 characters");   // refuse, never silently truncate
+  const notes = flags.notes ? String(flags.notes) : undefined;
+  // APPEND-ONLY: resolve the active run WITHOUT requireActiveRun (its abandoned-worktree sweep can write state.json).
+  const id = readActiveRunId(cwd);
+  if (!id) return fail("no active jam run in this project");
+  const dir = runDir(cwd, id);
+  if (!fs.existsSync(dir)) return fail(`active run ${id} has no run directory`);
+  appendLedger(dir, { at: new Date().toISOString(), type: "review-round", phase, round, blockers, ...(notes ? { notes } : {}) });
+  process.stdout.write(`recorded review-round ${phase} #${round} (blockers=${blockers})\n`);
+}
+
 async function main() {
   const [sub, ...rest] = process.argv.slice(2);
   const cwd = process.cwd();
@@ -798,6 +843,10 @@ async function main() {
       return cmdSprint(cwd, positional, flags);
     case "audit":
       return cmdAudit(cwd);
+    case "report":
+      return cmdReport(cwd, positional, flags);
+    case "review-round":
+      return cmdReviewRound(cwd, positional, flags);
     default:
       return fail(`unknown subcommand: ${sub ?? "(none)"}`);
   }
