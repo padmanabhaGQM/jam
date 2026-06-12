@@ -9,6 +9,29 @@ You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the bra
 
 > This skill drives ganjam's **repair (jam) mode**. For build-from-intent, see the `jam-greenfield` skill (`jam start --mode greenfield`).
 
+## Driving with a human supervisor (or new to jam?)
+
+Start every session with `jam resume`. It prints the active run, phase, blockers, and next action; after any restart or long pause, run it before deciding what to do.
+
+If the environment looks wrong, run `jam doctor` and fix the reported setup issue before continuing. For a full copy-paste supervised run script, see `QUICKSTART.md`.
+
+At each human gate, surface the artifact VERBATIM to the supervisor:
+- DIAGNOSE: show the rendered digest, including detector outputs and any local-scope risk.
+- VERIFY: show the adversarial verdict, including blocker counts and findings.
+- PLAN: show the recorded sprint plan and `verifyCmd`.
+- IMPLEMENT sprint close: show the sprint digest, evidence, transcript/session binding, and global verification result.
+- FINISH: show the audit result and live final verification result.
+
+Do not summarize these artifacts as a substitute for review. The supervisor approves the exact digest, verdict, plan, sprint evidence, or finish report that jam recorded.
+
+Their verbs are approve and reject:
+```bash
+/jam:approve <gate>
+jam reject <gate> --reason "..."
+```
+
+A rejection is a standing objection. Nothing advances until the artifact is re-produced and surfaced again. If the artifact is flawed, rewrite it and re-record it; if the direction is wrong, use `jam rewind <phase> --confirm <phase>` and accept that later approvals are invalidated by design.
+
 ## Non-negotiables
 
 - **Never advance a phase manually.** Every state transition goes through `jam advance`. If `jam advance` reports the gate is unsatisfied, do not proceed — fix the deficiency and re-run.
@@ -260,8 +283,8 @@ Codex turns can time out in practice. jam's engine **never kills** a Codex proce
 - Same never-kill rule applies. Surface it to the user; note the fallback in the verdict.
 - You may fall back to a tighter `/codex:adversarial-review` scope; note the fallback in the verdict.
 
-**Before answering after any pause, timeout, or resume:**
-Run `jam codex-status --event-log <run>/codex/<step>/events.jsonl` to read the live turn, and reconcile (`reconcile` in `lib/codex/reconcile.mjs`) the live question against your local pending one. Answer the **live thread** — never from stale memory of what you thought the session state was.
+**Before answering after any pause, timeout, restart, or resume:**
+Run `jam resume` first, then run `jam codex-status --event-log <run>/codex/<step>/events.jsonl` to read the live turn, and reconcile (`reconcile` in `lib/codex/reconcile.mjs`) the live question against your local pending one. Answer the **live thread** — never from stale memory of what you thought the session state was.
 
 ---
 
