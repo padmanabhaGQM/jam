@@ -93,3 +93,28 @@ test("jam report --all lists runs one line each and tolerates a corrupt run dir"
   assert.match(r.stdout, /r1 .*repair.*VERIFY/);
   assert.match(r.stdout, /broken.*unreadable/);
 });
+
+test("jam report --md writes report.md into the run dir with wikilinks; state+ledger untouched", () => {
+  const root = tmp();
+  startRun(root);
+  const rd = path.join(root, "docs", "superpowers", "loop-runs", "r1");
+  const stateBefore = fs.readFileSync(path.join(rd, "state.json"), "utf8");
+  const ledgerBefore = fs.readFileSync(path.join(rd, "ledger.jsonl"), "utf8");
+  const r = jam(root, ["report", "r1", "--md"]);
+  assert.equal(r.status, 0);
+  const md = fs.readFileSync(path.join(rd, "report.md"), "utf8");
+  assert.match(md, /# jam run r1/);
+  assert.match(md, /audit:/);
+  assert.equal(fs.readFileSync(path.join(rd, "state.json"), "utf8"), stateBefore);     // the ONLY write is report.md
+  assert.equal(fs.readFileSync(path.join(rd, "ledger.jsonl"), "utf8"), ledgerBefore);
+});
+
+test("report --md links spec/plan wikilinks when matching docs exist", () => {
+  const root = tmp();
+  startRun(root);
+  fs.mkdirSync(path.join(root, "docs", "superpowers", "specs"), { recursive: true });
+  fs.writeFileSync(path.join(root, "docs", "superpowers", "specs", "2026-01-01-r1-design.md"), "# spec");
+  const rd = path.join(root, "docs", "superpowers", "loop-runs", "r1");
+  jam(root, ["report", "r1", "--md"]);
+  assert.match(fs.readFileSync(path.join(rd, "report.md"), "utf8"), /\[\[2026-01-01-r1-design\]\]/);
+});

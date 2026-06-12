@@ -27,7 +27,7 @@ import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession, openTurn } from "./lib/sprint.mjs";
 import { auditRun } from "./lib/audit.mjs";
-import { reportRun, renderReport } from "./lib/report.mjs";
+import { reportRun, renderReport, renderReportMd } from "./lib/report.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
 import { shouldSweepAbandonedWorktree } from "./lib/worktree-sweep.mjs";
 import { evaluateDoctor, gatherProbes, renderDoctor } from "./lib/doctor.mjs";
@@ -773,19 +773,33 @@ function cmdReport(cwd, positional, flags) {
     }
     return;
   }
-  let dir;
+  let dir, runIdUsed;
   if (positional[0]) {
-    dir = runDir(cwd, positional[0]);
-    if (!fs.existsSync(dir)) return fail(`no such run: ${positional[0]}`);
+    runIdUsed = positional[0];
+    dir = runDir(cwd, runIdUsed);
+    if (!fs.existsSync(dir)) return fail(`no such run: ${runIdUsed}`);
   } else {
     // STRICT read-only: do NOT use requireActiveRun (its abandoned-worktree sweep can WRITE state.json).
     const id = readActiveRunId(cwd);
     if (!id) return fail("no active jam run in this project (run `jam report <runId>` or start a run)");
+    runIdUsed = id;
     dir = runDir(cwd, id);
     if (!fs.existsSync(dir)) return fail(`active run ${id} has no run directory`);
   }
   const rep = reportRun({ runDir: dir });
   if (rep.error) return fail(rep.error);
+  if ("md" in flags) {
+    const docDir = (sub) => {
+      try {
+        return fs.readdirSync(path.join(cwd, "docs", "superpowers", sub))
+          .filter((f) => f.endsWith(".md") && f.includes(runIdUsed));
+      } catch { return []; }
+    };
+    const out = path.join(dir, "report.md");
+    fs.writeFileSync(out, renderReportMd(rep, { runId: runIdUsed, specs: docDir("specs"), plans: docDir("plans") }));
+    process.stdout.write(`wrote ${out}\n`);
+    return;
+  }
   process.stdout.write("json" in flags ? JSON.stringify(rep, null, 2) + "\n" : renderReport(rep));
 }
 function cmdReviewRound(cwd, positional, flags) {

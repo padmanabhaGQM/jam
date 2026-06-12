@@ -5,6 +5,12 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.20.0 — Production P2: the newcomer's path
+- README truth-synced (greenfield + routinely-exercised real-Codex VERIFY acknowledged; the one remaining unproven claim — live human gate-supervision — stated plainly); QUICKSTART.md is the script for that proof run; docs/examples/production-p1.md is a worked example generated from a real run ledger.
+- SessionStart hook implemented (resume-powered announce; silent outside jam projects). Decorative JSON schemas removed — the JS validators are the single source of truth.
+- `jam report --md` writes a wikilinked markdown report into the run directory (vault-friendly; state/ledger untouched).
+- Supervisor hand-holding sections in both skills.
+
 ## 0.19.0 — Production P1: the control surface is complete
 - **`jam doctor`** — environment preflight (Node, git, Codex CLI + auth, repo state, version coherence) with an actionable fix per failing check; guided errors point first-run failures at it.
 - **`jam reject <gate> --reason`** — refuse a gate with a recorded reason; approval over a rejection is structurally impossible until the artifact is re-produced (audited).
