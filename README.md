@@ -165,10 +165,12 @@ jam covers the *hardening* middle of the lifecycle. Pair it with brainstorming/p
 
 ```bash
 git clone https://github.com/padmanabhaGQM/jam && cd jam
-npm test          # 419 tests, no dependencies (node --test)
+npm test          # 422 tests, no dependencies (node --test)
 # drive the CLI by hand from the clone:
 node plugins/jam/scripts/jam.mjs status
 ```
+
+**Validation:** jam has no JSON-schema layer — the JS validators are the single source of truth: `validateState` is enforced on EVERY state write; artifact validators (`validatePlan`, `validateDigest`, the greenfield setters' checks) are enforced at ingestion of their artifacts.
 
 No runtime dependencies (Node ESM + `node:test`). Issues and PRs welcome.
 
