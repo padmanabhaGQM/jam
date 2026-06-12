@@ -9,7 +9,7 @@ repair/hardening loop for Claude Code — **without surrendering your control.**
 
 Governing principle: **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — on-disk state, mechanism-bound gates, an immutable ledger, a run-honesty audit — that the models cannot talk past.
 
-> **Status — pre-alpha.** The control surface is built and unit-tested (417 tests), and the full `DIAGNOSE → VERIFY → PLAN → IMPLEMENT → FINISH` loop has been **driven end-to-end with real Codex** on a controlled repo (real bug, real `verify.sh`; Codex grounded the diagnosis and implemented the fix; the global gate, role-binding, and honesty audit all held to FINISH). **Not yet proven:** a hard repair under live human gate-supervision, and the VERIFY adversarial-review turn against real Codex. Treat jam as rigorously built but not battle-tested. See [CHANGELOG.md](CHANGELOG.md).
+> **Status — rigorously built, instrumented, not yet human-proven.** Two complete loops: **repair** (`DIAGNOSE → VERIFY → PLAN → IMPLEMENT → FINISH`) — jam has built its own slices through it since 0.13 — a captured run ledger is checked in at [docs/examples/production-p1.ledger.jsonl](docs/examples/production-p1.ledger.jsonl) (run dirs themselves live under `docs/superpowers/loop-runs/`, gitignored as working state) — and **greenfield** (`GROUND → CONVERGE → SPECIFY → BUILD → FINISH`) — complete and tested end-to-end, not yet driven on a real external project. jam's build process includes an adversarial VERIFY stage (driven, as a matter of process, through Codex review turns — the ledger records the rounds and blocker counts, not the reviewer's identity); since 0.18 every round is a **ledger fact** you can audit yourself — the 0.19 slice recorded **17 verification rounds to zero blockers** (`jam report production-p1`). Today's mechanisms (0.16+): every sprint carries a **content-bound Codex session transcript** (file↔session identity — the strongest authorship signal a file anchor gives) and is gated by the project's global acceptance command, re-run **live** at FINISH; on git-backed projects each Codex turn runs **isolated in a disposable worktree** (0.17+; non-git projects fall back to in-place editing, loudly). Earlier runs predate the mechanisms that now gate them — the audit reports them against today's stricter bar (`jam report --all`). **The one claim still unproven: a run under live human gate-supervision.** [QUICKSTART.md](QUICKSTART.md) is the script for exactly that run. 425 tests, no dependencies. See [CHANGELOG.md](CHANGELOG.md).
 
 **Two modes.** jam runs in **repair** mode (`jam diagnose` — fix/harden an existing repo through `DIAGNOSE→VERIFY→PLAN→IMPLEMENT→FINISH`) or **greenfield** mode (`jam start --mode greenfield` — build from a raw intent, starting with a `GROUND` phase that produces an evidence-backed, human-ratified grounded-intent). The `CONVERGE` phase then converges Claude+Codex on one evidence-backed architecture decision (human-ratified). `SPECIFY` then authors the project's global `verifyCmd` as a human-ratified, un-gameable SSOT (red-first + dimension-coverage + a Codex gameability audit). Finally `BUILD` runs the gated sprint loop against that locked verifyCmd to `FINISH` — the same machinery repair mode uses. The full `intent → GROUND → CONVERGE → SPECIFY → BUILD → FINISH` greenfield loop is complete. Each Codex sprint turn runs in an isolated worktree and only lands in your tree via a gated `jam reconcile` — a timed-out or runaway turn can't touch your working tree.
 
@@ -52,6 +52,8 @@ In Claude Code:
 
 Restart Claude Code to load it. Installed at user level, jam is available in **every** project — but a run only starts when you ask.
 
+**New here? Start with [QUICKSTART.md](QUICKSTART.md).** Worked example: [docs/examples/production-p1.md](docs/examples/production-p1.md).
+
 ## How you use it
 
 Two layers:
@@ -64,7 +66,7 @@ Two layers:
 | Command | Purpose |
 |---|---|
 | `/jam:start <topic>` | Begin a run |
-| `/jam:status [run-id]` | Phase, gates, sprints, provenance, directives |
+| `/jam:status` | Phase, gates, sprints, provenance, and directives for the active run; use `jam report <runId>` for a specific past run |
 | `/jam:doctor` | Check Node, git, Codex CLI/auth, repo state, and version coherence |
 | `/jam:approve <gate>` | Record your sign-off |
 | `/jam:reject <gate>` | Refuse a human gate with a recorded reason until its artifact is re-produced |
@@ -73,6 +75,40 @@ Two layers:
 | `/jam:dial <gate> <mode>` | Tighten or explicitly delegate a gate's strictness |
 | `/jam:resume` | Read-only run status with one next-action hint |
 | `/jam:cancel` | Cancel the run |
+
+### CLI command reference
+
+| Command | Purpose |
+|---|---|
+| `jam diagnose <topic> --goal <file>` / `jam start <topic> --mode greenfield` | Start a repair run from a goal file or a greenfield run from raw intent. |
+| `jam ground sharpen --file <json>` / `jam ground claim --file <json>` / `jam ground refute --id <claimId>` / `jam ground converge --file <json>` | Shape greenfield intent, record/refute grounded claims, and close the GROUND gate. |
+| `jam converge shortlist --file <json>` / `jam converge decide --agent <claude|codex> --file <json>` / `jam converge tiebreak --choose <option>` / `jam converge finalize --file <json>` | Converge Claude and Codex on one architecture decision with recorded spikes and accepted unknowns. |
+| `jam specify coverage --file <json>` / `jam specify redproof` / `jam specify gameability --file <json>` / `jam specify certify` | Build and certify the project-wide acceptance bar for greenfield work. |
+| `jam build plan --file <json>` | Record the greenfield BUILD sprint plan against the certified `verifyCmd`. |
+| `jam status` | Show phase, gates, sprints, Codex provenance, actions, and active directives for the active run; use `jam report <runId>` for a specific past run. |
+| `jam resume` | Print read-only status plus one next-action hint after a restart or context switch. |
+| `jam render-digest <gateId> --file <json>` | Attach a gate digest so the supervisor can inspect and approve it. |
+| `jam approve <gateId>` | Record supervisor approval for a human gate. |
+| `jam reject <gateId> --reason "<text>"` | Refuse a gate until the artifact is re-produced; earlier-phase rejections tell you when to rewind. |
+| `jam verify --file <verdict.json>` | Record the adversarial VERIFY verdict; blockers keep the gate closed. |
+| `jam plan --file <plan.json>` | Record the repair plan and global `verifyCmd`. |
+| `jam sprint <id> --start|--verify|--done` | Start a sprint, re-run the global acceptance command, and close the sprint only after verification and Codex authorship. |
+| `jam codex-run --sprint <id> --prompt-file <file> --timeout <ms> --out-dir <dir>` / `jam codex-resume <sessionId> --prompt-file <file>` / `jam codex-status --event-log <file>` | Drive, resume, and inspect Codex turns; sprint turns are isolated on git projects and are never killed on timeout. |
+| `jam reconcile --sprint <id>` | Land a completed isolated Codex turn through the gated reconcile path. |
+| `jam advance` | Move to the next phase only when the current gate and its mechanisms are satisfied; FINISH re-runs the audit. |
+| `jam rewind <phase> --confirm <phase>` | Move backward deliberately and invalidate later approvals by design. |
+| `jam dial <gateId> --mode <human|show-and-proceed> [--confirm <gateId>]` | Tighten or explicitly delegate a gate's strictness. |
+| `jam promote-sprint <id> --title <text> --reason <text>` | Add discovered scope as an auditable promoted sprint. |
+| `jam evidence <gateId> --sprint <id> --cmd "<command>"` | Run and record sprint-scoped evidence for a gate. |
+| `jam steer "<text>"` | Add a durable steering directive that remains visible at gates. |
+| `jam propose-action <id> --type <type> [--target <x>] [--command <cmd>]` | Classify a consequential action before execution. |
+| `jam ratify <id> --confirm <id>` / `jam ratify <id> --deny` | Human-ratify or deny an irreversible hard-blocked action. |
+| `jam audit` | Re-prove run honesty: phase ordering, gate evidence, Codex authorship, promotions, and DAG order. |
+| `jam report [run-id] [--all]` | Render ledger-backed run summaries without mutating state. |
+| `jam review-round --phase VERIFY|SLICE --round <n> --blockers <k>` | Append an adversarial review round as a ledger fact. |
+| `jam doctor` | Check Node, git, Codex CLI/auth, repo state, and version coherence. |
+| `jam cancel --confirm <runId>` | Cancel the active run with explicit confirmation. |
+| `jam add-gate <gateId> --mode <human|auto|show-and-proceed>` | Add a gate to the active run control surface. |
 
 ## The repair loop (what the orchestrator runs)
 
@@ -120,19 +156,21 @@ jam covers the *hardening* middle of the lifecycle. Pair it with brainstorming/p
 
 ## Honest limitations
 
-- jam is a **repair/hardening** loop, not a greenfield architect and **not a deployer**.
-- It has **never driven a hard repair under live human supervision** — the proven run was a one-line fix with gates self-approved in test mode.
-- The VERIFY adversarial-review integration is exercised by design/prose; it has not been run against real Codex end-to-end.
-- The acceptance bar is only as good as your `verifyCmd`.
+- **No run has yet been supervised live by a human at the gates.** Every dogfooded slice self-approved its gates under controller supervision. Your first completed [QUICKSTART](QUICKSTART.md) run retires this line.
+- **The acceptance bar is only as good as your `verifyCmd`.** jam certifies and re-runs it; it cannot know what your tests fail to test.
+- **jam defends against drift and accident, not a deliberately adversarial model.** Known boundaries, by design: raw in-turn shell is **not jam-governed** (the deferred G0.5 layer — on git projects, repo edits are contained by disposable worktrees; the shell itself is whatever Codex's own sandbox enforces); transcript authorship is content-bound but anchored on `CODEX_HOME` write access; hand-forged `state.json`/ledger is treated like forged git history — out of model.
+- **jam is not a deployer.** It ends at FINISH with the acceptance command green; shipping is yours.
 
 ## Develop / contribute
 
 ```bash
 git clone https://github.com/padmanabhaGQM/jam && cd jam
-npm test          # 417 tests, no dependencies (node --test)
+npm test          # 425 tests, no dependencies (node --test)
 # drive the CLI by hand from the clone:
 node plugins/jam/scripts/jam.mjs status
 ```
+
+**Validation:** jam has no JSON-schema layer — the JS validators are the single source of truth: `validateState` is enforced on EVERY state write; artifact validators (`validatePlan`, `validateDigest`, the greenfield setters' checks) are enforced at ingestion of their artifacts.
 
 No runtime dependencies (Node ESM + `node:test`). Issues and PRs welcome.
 

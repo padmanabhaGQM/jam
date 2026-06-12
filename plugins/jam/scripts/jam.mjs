@@ -27,11 +27,12 @@ import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession, openTurn } from "./lib/sprint.mjs";
 import { auditRun } from "./lib/audit.mjs";
-import { reportRun, renderReport } from "./lib/report.mjs";
+import { reportRun, renderReport, renderReportMd } from "./lib/report.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
 import { shouldSweepAbandonedWorktree } from "./lib/worktree-sweep.mjs";
 import { evaluateDoctor, gatherProbes, renderDoctor } from "./lib/doctor.mjs";
 import { deriveNextAction } from "./lib/resume.mjs";
+import { renderStatus } from "./lib/render-status.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -120,56 +121,6 @@ function cmdDoctor(cwd) {
   const r = evaluateDoctor(gatherProbes(cwd));
   process.stdout.write(renderDoctor(r));
   if (!r.ok) process.exit(1);
-}
-
-function renderStatus(state, runId) {
-  const lines = [`run ${runId} — phase ${state.phase}`];
-  if (state.mode === "greenfield") {
-    const g = state.grounding ?? {};
-    const byStatus = (g.claims ?? []).reduce((m, c) => ((m[c.status] = (m[c.status] ?? 0) + 1), m), {});
-    lines.push(`mode greenfield · phase ${state.phase}`);
-    lines.push(`  grounding: problem ${g.problem ? "set" : "unset"} · dimensions ${(g.dimensions ?? []).length} · claims: ${(g.claims ?? []).length}${Object.keys(byStatus).length ? " (" + Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(", ") + ")" : ""} · converged ${g.converged ? "yes" : "no"}`);
-    if (state.convergence) {
-      const c = state.convergence;
-      const byStatus = (c.ledger ?? []).reduce((m, r) => ((m[r.status] = (m[r.status] ?? 0) + 1), m), {});
-      const agreeStr = c.agree === null ? "pending" : c.agree ? "agree" : "DISAGREE";
-      lines.push(`  convergence: shortlist ${(c.shortlist ?? []).length} · decisions ${Object.keys(c.decisions ?? {}).length}/2 (${agreeStr}) · chosen ${c.chosen ?? "—"} · ledger ${(c.ledger ?? []).length}${Object.keys(byStatus).length ? " (" + Object.entries(byStatus).map(([k, v]) => `${k}:${v}`).join(", ") + ")" : ""} · decided ${c.decided ? "yes" : "no"}`);
-    }
-    if (state.spec) {
-      const sp = state.spec;
-      const red = sp.redProof ? `exit ${sp.redProof.exitCode}` : "none";
-      const game = sp.gameability ? `${sp.gameability.survivingFindings} surviving` : "none";
-      lines.push(`  spec: verifyCmd ${sp.verifyCmd ? "set" : "unset"} · checks ${(sp.checks ?? []).length} · red-proof ${red} · gameability ${game} · certified ${sp.certified ? "yes" : "no"}`);
-    }
-  }
-  for (const [id, g] of Object.entries(state.gates)) {
-    lines.push(`  gate ${id}: ${g.mode}/${g.status}`);
-  }
-  const active = state.steeringDirectives.filter((d) => d.status === "active");
-  if (active.length) {
-    lines.push(`  active directives: ${active.map((d) => d.id).join(", ")}`);
-  }
-  if (state.plan) {
-    lines.push(`  verify: ${state.plan.verifyCmd}`);
-    const done = new Set(state.plan.sprints.filter((s) => s.status === "done").map((s) => s.id));
-    for (const sp of state.plan.sprints) {
-      const needs = sp.needs ?? [];
-      const blocked = sp.status === "pending" && needs.some((n) => !done.has(n));
-      const tag = sp.status === "pending" ? (blocked ? " (blocked)" : " (ready)") : "";
-      const needsStr = needs.length ? ` needs:${needs.join(",")}` : "";
-      lines.push(`  sprint ${sp.id}: ${sp.status} [${sp.provenance ?? "?"}]${needsStr}${tag} — ${sp.title}`);
-      for (const cs of sp.codexSessions ?? []) {
-        lines.push(`      codex: ${cs.sessionId} (${cs.transcriptPath ? "transcript" : "no-transcript"})`);
-      }
-    }
-    for (const p of state.promotions ?? []) {
-      lines.push(`  promotion ${p.id}: ${p.reason} (by ${p.discoveredBy})`);
-    }
-  }
-  for (const a of state.actions ?? []) {
-    lines.push(`  action ${a.id}: ${a.type ?? "?"} [${a.irreversible ? "HARD-BLOCK" : "ok"}] ${a.status}${a.reasons?.length ? " — " + a.reasons.join("; ") : ""}`);
-  }
-  return lines.join("\n") + "\n";
 }
 
 function cmdStatus(cwd) {
@@ -822,19 +773,34 @@ function cmdReport(cwd, positional, flags) {
     }
     return;
   }
-  let dir;
+  let dir, runIdUsed;
   if (positional[0]) {
-    dir = runDir(cwd, positional[0]);
-    if (!fs.existsSync(dir)) return fail(`no such run: ${positional[0]}`);
+    runIdUsed = positional[0];
+    dir = runDir(cwd, runIdUsed);
+    if (!fs.existsSync(dir)) return fail(`no such run: ${runIdUsed}`);
   } else {
     // STRICT read-only: do NOT use requireActiveRun (its abandoned-worktree sweep can WRITE state.json).
     const id = readActiveRunId(cwd);
     if (!id) return fail("no active jam run in this project (run `jam report <runId>` or start a run)");
+    runIdUsed = id;
     dir = runDir(cwd, id);
     if (!fs.existsSync(dir)) return fail(`active run ${id} has no run directory`);
   }
   const rep = reportRun({ runDir: dir });
   if (rep.error) return fail(rep.error);
+  if ("md" in flags && "json" in flags) return fail("report: --md and --json are mutually exclusive");
+  if ("md" in flags) {
+    const docDir = (sub) => {
+      try {
+        return fs.readdirSync(path.join(cwd, "docs", "superpowers", sub))
+          .filter((f) => f.endsWith(".md") && f.includes(runIdUsed));
+      } catch { return []; }
+    };
+    const out = path.join(dir, "report.md");
+    fs.writeFileSync(out, renderReportMd(rep, { runId: runIdUsed, specs: docDir("specs"), plans: docDir("plans") }));
+    process.stdout.write(`wrote ${out}\n`);
+    return;
+  }
   process.stdout.write("json" in flags ? JSON.stringify(rep, null, 2) + "\n" : renderReport(rep));
 }
 function cmdReviewRound(cwd, positional, flags) {

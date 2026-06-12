@@ -7,7 +7,32 @@ description: Use to run ganjam's greenfield mode — the full GROUND→CONVERGE�
 
 You drive ganjam's **greenfield** mode: build-from-intent. This is the sibling of repair mode (see `jam-orchestrator`). The full `GROUND → CONVERGE → SPECIFY → BUILD → FINISH` loop is live: ground intent, converge on one decision, certify the global verifyCmd SSOT, then build through the gated sprint loop to FINISH.
 
-**Claude is the brain, Codex is the independent adversary/researcher, the human is the director** who ratifies at two gates. Agent agreement is never authority (G0 still governs any irreversible probe command — declare it via `jam propose-action`).
+**Claude is the brain, Codex is the independent adversary/researcher, the human is the director** who ratifies each gate. Agent agreement is never authority (G0 still governs any irreversible probe command — declare it via `jam propose-action`).
+
+## Driving with a human supervisor (or new to jam?)
+
+Start every session with `jam resume`. It shows the active greenfield phase, pending gate, blockers, and next action. After a restart or long pause, run `jam resume` before trusting memory.
+
+If the environment drifted, run `jam doctor` and fix the reported setup issue before continuing. For the supervised-run script, see `QUICKSTART.md`.
+
+At every gate, surface the recorded artifact VERBATIM. The human is deciding on the exact thing jam will treat as authoritative:
+
+- `GROUND-scope`: show the sharpened intent exactly as recorded. The sharpened intent IS the contract for research; the human decides whether the problem statement and acceptance dimensions are the right target before any probe work starts.
+- `GROUND`: show the claim ledger and grounded intent. Every feasibility claim must carry a probe transcript; open unknowns must be explicit; the human decides whether the evidence is enough to move from framing to decision.
+- `CONVERGE-shortlist`: show the shortlisted candidates before spikes. The human decides whether the option set is worth spending evidence-gathering time on.
+- `CONVERGE`: show the final decision, spike transcript references, satisfied dimensions, and accepted unknowns. The human decides whether this is the one build direction and which risks are knowingly accepted.
+- `SPECIFY-coverage`: show the proposed `verifyCmd`, checks, and dimension coverage before red-first/gameability work. The human decides whether the acceptance surface is the right one to harden.
+- `SPECIFY`: show the certified acceptance bar verbatim: red-first proof, coverage, and gameability audit. The human is signing the acceptance bar that will govern BUILD.
+- `BUILD-plan`: show the sprint breakdown, dependency order, acceptance criteria, and locked `verifyCmd`. The human decides whether the build sequence is complete and appropriately gated.
+- Sprint close and FINISH: show the evidence, transcript/session binding, global verification result, audit, and live final verification result.
+
+Their verbs are approve and reject:
+```bash
+jam approve <gate>
+jam reject <gate> --reason "..."
+```
+
+A rejection is a standing objection. Nothing advances until the artifact is re-produced and surfaced again. If the artifact is wrong, rewrite and re-record it; if the direction is wrong, use `jam rewind <phase> --confirm <phase>` and accept that later approvals are invalidated by design.
 
 ## Non-negotiables
 - **Never hand-edit `state.json`.** All writes go through the `jam` CLI.
