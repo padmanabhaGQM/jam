@@ -109,6 +109,16 @@ test("jam report --md writes report.md into the run dir with wikilinks; state+le
   assert.equal(fs.readFileSync(path.join(rd, "ledger.jsonl"), "utf8"), ledgerBefore);
 });
 
+test("jam report refuses --md and --json together without writing report.md", () => {
+  const root = tmp();
+  startRun(root);
+  const rd = path.join(root, "docs", "superpowers", "loop-runs", "r1");
+  const r = jam(root, ["report", "r1", "--md", "--json"]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /report: --md and --json are mutually exclusive/);
+  assert.equal(fs.existsSync(path.join(rd, "report.md")), false);
+});
+
 test("report --md links spec/plan wikilinks when matching docs exist", () => {
   const root = tmp();
   startRun(root);

@@ -84,7 +84,7 @@ Start a repair run:
 jam diagnose "fix the issue in jam-goal.md" --goal jam-goal.md
 ```
 
-## 3. The run — what YOU do at each gate
+## 3. The run — what YOU do at each phase
 
 At every human gate, read the full artifact before approving. If the artifact is wrong, reject it with a reason; a rejection is a standing objection until the artifact is re-produced.
 
@@ -93,8 +93,8 @@ At every human gate, read the full artifact before approving. If the artifact is
 | `DIAGNOSE` | Root cause plus a 4-detector digest | The digest, cited evidence, active steering, and diagnosis scope | `/jam:approve DIAGNOSE` or `jam reject DIAGNOSE --reason "..."` |
 | `VERIFY` | Adversarial review verdict | Surviving blockers, if any, and the evidence behind them | `/jam:approve VERIFY` or `jam reject VERIFY --reason "..."` |
 | `PLAN` | Sprint DAG plus global `verifyCmd` | Sprint boundaries, dependencies, acceptance criteria, and whether `verifyCmd` is the whole bar | `/jam:approve PLAN` or `jam reject PLAN --reason "..."` |
-| `IMPLEMENT` | Codex-authored sprint diffs and verification evidence | Sprint status, reconcile result, global verification output, and provenance | `/jam:approve IMPLEMENT` or `jam reject IMPLEMENT --reason "..."` |
-| `FINISH` | Audit and report | Final verification, audit result, ledger facts, and any promoted scope | `/jam:approve FINISH` or `jam reject FINISH --reason "..."` |
+| `IMPLEMENT` | Codex-authored sprint diffs and verification evidence | Sprint status, reconcile result, global verification output, and provenance | Loop `jam sprint <id> --start`, Codex, `jam reconcile --sprint <id>`, `jam sprint <id> --verify`, then `jam sprint <id> --done` per sprint |
+| `FINISH` | Audit and report | Final verification, audit result, ledger facts, and any promoted scope | Run `jam advance` after all sprints are done; inspect the result with `jam report` |
 
 Check where the run is:
 

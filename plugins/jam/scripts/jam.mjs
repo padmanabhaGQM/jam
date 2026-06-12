@@ -788,6 +788,7 @@ function cmdReport(cwd, positional, flags) {
   }
   const rep = reportRun({ runDir: dir });
   if (rep.error) return fail(rep.error);
+  if ("md" in flags && "json" in flags) return fail("report: --md and --json are mutually exclusive");
   if ("md" in flags) {
     const docDir = (sub) => {
       try {

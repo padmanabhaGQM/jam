@@ -66,7 +66,7 @@ Two layers:
 | Command | Purpose |
 |---|---|
 | `/jam:start <topic>` | Begin a run |
-| `/jam:status [run-id]` | Phase, gates, sprints, provenance, directives |
+| `/jam:status` | Phase, gates, sprints, provenance, and directives for the active run; use `jam report <runId>` for a specific past run |
 | `/jam:doctor` | Check Node, git, Codex CLI/auth, repo state, and version coherence |
 | `/jam:approve <gate>` | Record your sign-off |
 | `/jam:reject <gate>` | Refuse a human gate with a recorded reason until its artifact is re-produced |
@@ -85,7 +85,7 @@ Two layers:
 | `jam converge shortlist --file <json>` / `jam converge decide --agent <claude|codex> --file <json>` / `jam converge tiebreak --choose <option>` / `jam converge finalize --file <json>` | Converge Claude and Codex on one architecture decision with recorded spikes and accepted unknowns. |
 | `jam specify coverage --file <json>` / `jam specify redproof` / `jam specify gameability --file <json>` / `jam specify certify` | Build and certify the project-wide acceptance bar for greenfield work. |
 | `jam build plan --file <json>` | Record the greenfield BUILD sprint plan against the certified `verifyCmd`. |
-| `jam status [run-id]` | Show phase, gates, sprints, Codex provenance, actions, and active directives for the active run. |
+| `jam status` | Show phase, gates, sprints, Codex provenance, actions, and active directives for the active run; use `jam report <runId>` for a specific past run. |
 | `jam resume` | Print read-only status plus one next-action hint after a restart or context switch. |
 | `jam render-digest <gateId> --file <json>` | Attach a gate digest so the supervisor can inspect and approve it. |
 | `jam approve <gateId>` | Record supervisor approval for a human gate. |

@@ -5,7 +5,7 @@ description: Use to run a jam repair-mode loop — the gated DIAGNOSE→VERIFY�
 
 # jam orchestrator — DIAGNOSE → VERIFY → PLAN → IMPLEMENT
 
-You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the brain** (root-cause analysis, digest assembly, gate management); **Codex is the independent adversary/grounder** (parallel diagnosis via jam's own codex engine, adversarial refutation via `/codex:adversarial-review`); **the user supervises and approves each gate.**
+You drive the asymmetric Claude–Codex loop in repair mode. **Claude is the brain** (root-cause analysis, digest assembly, gate management); **Codex is the independent adversary/grounder** (parallel diagnosis via jam's own codex engine, adversarial refutation via `/codex:adversarial-review`); **the user supervises the run, approves DIAGNOSE/VERIFY/PLAN gates, and closes IMPLEMENT sprints.**
 
 > This skill drives ganjam's **repair (jam) mode**. For build-from-intent, see the `jam-greenfield` skill (`jam start --mode greenfield`).
 
@@ -15,22 +15,24 @@ Start every session with `jam resume`. It prints the active run, phase, blockers
 
 If the environment looks wrong, run `jam doctor` and fix the reported setup issue before continuing. For a full copy-paste supervised run script, see `QUICKSTART.md`.
 
-At each human gate, surface the artifact VERBATIM to the supervisor:
+Repair runs create human approval gates only for DIAGNOSE, VERIFY, and PLAN. At each human gate, surface the artifact VERBATIM to the supervisor:
 - DIAGNOSE: show the rendered digest, including detector outputs and any local-scope risk.
 - VERIFY: show the adversarial verdict, including blocker counts and findings.
 - PLAN: show the recorded sprint plan and `verifyCmd`.
-- IMPLEMENT sprint close: show the sprint digest, evidence, transcript/session binding, and global verification result.
-- FINISH: show the audit result and live final verification result.
 
-Do not summarize these artifacts as a substitute for review. The supervisor approves the exact digest, verdict, plan, sprint evidence, or finish report that jam recorded.
+Do not summarize these artifacts as a substitute for review. The supervisor approves the exact digest, verdict, or plan that jam recorded.
 
-Their verbs are approve and reject:
+Their human-gate verbs are approve and reject:
 ```bash
 /jam:approve <gate>
 jam reject <gate> --reason "..."
 ```
 
 A rejection is a standing objection. Nothing advances until the artifact is re-produced and surfaced again. If the artifact is flawed, rewrite it and re-record it; if the direction is wrong, use `jam rewind <phase> --confirm <phase>` and accept that later approvals are invalidated by design.
+
+IMPLEMENT has no phase-level human approve/reject gate: close each sprint with the sprint loop verbs (`jam sprint <id> --start`, Codex, `jam reconcile --sprint <id>`, `jam sprint <id> --verify`, `jam sprint <id> --done`). Before `--done`, surface the sprint digest, evidence, transcript/session binding, and global verification result.
+
+FINISH has no human approve/reject gate: after all sprints are done, run `jam advance`, which refuses unless the honesty audit passes and the LIVE `verifyCmd` re-run succeeds. Surface the audit and final verification result, then use `jam report` for the recorded run report.
 
 ## Non-negotiables
 
