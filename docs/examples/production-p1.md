@@ -47,6 +47,9 @@ The acceptance command re-ran live at FINISH:
 
 ## Read it yourself
 
+The complete raw ledger for this run is checked in beside this file: [production-p1.ledger.jsonl](production-p1.ledger.jsonl) — every number above can be verified against it directly.
+
+
 From this repository:
 
 ```bash
