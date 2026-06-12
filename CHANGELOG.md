@@ -5,6 +5,13 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.21.0 — Usability-1: CLI-first newcomer path + drift closure
+- `jam help` is registry-driven, so command discovery, per-command usage, and JSON shapes come from one source; `jam next` prints the single copy-pasteable next action, and `jam init` runs the doctor preflight, explains where run state lives and who produces what, and writes a `jam-goal.md` template (never overwriting an existing one).
+- The guidance chain now uses `producerHint` end to end: refusals name the producing command, CLI spelling is consistent, sprint verify failures show the evidence tail, and Exceptions A/B are documented in behavior (`ratified` resolves hard-block gates without `jam approve`; aggregate command hints match executable forms).
+- Newcomer docs were rebuilt around HOW-JAM-WORKS.md and a CLI-first QUICKSTART, including stop-hook, ledger facts, greenfield sub-gates, turn statuses, gate modes, rewind semantics, and the D1-D10 skill drift fixes.
+- Audit-driven release: 3-agent fresh-eyes audit, 9 verify rounds, and `npm test` at 467 tests.
+- Known-limitation roadmap: `jam start` without --mode creates an ALIGN run that cannot advance (latent; help no longer advertises it).
+
 ## 0.20.0 — Production P2: the newcomer's path
 - README truth-synced (greenfield + routinely-exercised real-Codex VERIFY acknowledged; the one remaining unproven claim — live human gate-supervision — stated plainly); QUICKSTART.md is the script for that proof run; docs/examples/production-p1.md is a worked example generated from a real run ledger.
 - SessionStart hook implemented (resume-powered announce; silent outside jam projects). Decorative JSON schemas removed — the JS validators are the single source of truth.

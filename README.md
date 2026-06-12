@@ -1,4 +1,4 @@
-# jam — an honest, controlled Claude–Codex build loop
+# jam - an honest, controlled Claude (Anthropic)-Codex (OpenAI) build loop
 
 **jam** pairs **Claude** (the brain) and **Codex** (the hands) into a single, supervised
 repair/hardening loop for Claude Code — **without surrendering your control.**
@@ -9,9 +9,17 @@ repair/hardening loop for Claude Code — **without surrendering your control.**
 
 Governing principle: **trust the structure, not the model** (including not trusting Claude, the orchestrator). Every control is enforced by deterministic plugin machinery — on-disk state, mechanism-bound gates, an immutable ledger, a run-honesty audit — that the models cannot talk past.
 
-> **Status — rigorously built, instrumented, not yet human-proven.** Two complete loops: **repair** (`DIAGNOSE → VERIFY → PLAN → IMPLEMENT → FINISH`) — jam has built its own slices through it since 0.13 — a captured run ledger is checked in at [docs/examples/production-p1.ledger.jsonl](docs/examples/production-p1.ledger.jsonl) (run dirs themselves live under `docs/superpowers/loop-runs/`, gitignored as working state) — and **greenfield** (`GROUND → CONVERGE → SPECIFY → BUILD → FINISH`) — complete and tested end-to-end, not yet driven on a real external project. jam's build process includes an adversarial VERIFY stage (driven, as a matter of process, through Codex review turns — the ledger records the rounds and blocker counts, not the reviewer's identity); since 0.18 every round is a **ledger fact** you can audit yourself — the 0.19 slice recorded **17 verification rounds to zero blockers** (`jam report production-p1`). Today's mechanisms (0.16+): every sprint carries a **content-bound Codex session transcript** (file↔session identity — the strongest authorship signal a file anchor gives) and is gated by the project's global acceptance command, re-run **live** at FINISH; on git-backed projects each Codex turn runs **isolated in a disposable worktree** (0.17+; non-git projects fall back to in-place editing, loudly). Earlier runs predate the mechanisms that now gate them — the audit reports them against today's stricter bar (`jam report --all`). **The one claim still unproven: a run under live human gate-supervision.** [QUICKSTART.md](QUICKSTART.md) is the script for exactly that run. 425 tests, no dependencies. See [CHANGELOG.md](CHANGELOG.md).
+**New here? Read [HOW-JAM-WORKS.md](HOW-JAM-WORKS.md) first — one page.** Then run [QUICKSTART.md](QUICKSTART.md).
 
-**Two modes.** jam runs in **repair** mode (`jam diagnose` — fix/harden an existing repo through `DIAGNOSE→VERIFY→PLAN→IMPLEMENT→FINISH`) or **greenfield** mode (`jam start --mode greenfield` — build from a raw intent, starting with a `GROUND` phase that produces an evidence-backed, human-ratified grounded-intent). The `CONVERGE` phase then converges Claude+Codex on one evidence-backed architecture decision (human-ratified). `SPECIFY` then authors the project's global `verifyCmd` as a human-ratified, un-gameable SSOT (red-first + dimension-coverage + a Codex gameability audit). Finally `BUILD` runs the gated sprint loop against that locked verifyCmd to `FINISH` — the same machinery repair mode uses. The full `intent → GROUND → CONVERGE → SPECIFY → BUILD → FINISH` greenfield loop is complete. Each Codex sprint turn runs in an isolated worktree and only lands in your tree via a gated `jam reconcile` — a timed-out or runaway turn can't touch your working tree.
+> **Status — rigorously built, instrumented, not yet human-proven.** Two complete loops: **repair** (`DIAGNOSE → VERIFY → PLAN → IMPLEMENT → FINISH`) — jam has built its own slices through it since 0.13 — a captured run ledger is checked in at [docs/examples/production-p1.ledger.jsonl](docs/examples/production-p1.ledger.jsonl) (run dirs themselves live under `docs/superpowers/loop-runs/`, gitignored as working state) — and **greenfield** (`GROUND → CONVERGE → SPECIFY → BUILD → FINISH`) — complete and tested end-to-end, not yet driven on a real external project. jam's build process includes an adversarial VERIFY stage (driven, as a matter of process, through Codex review turns — the ledger records the rounds and blocker counts, not the reviewer's identity); since 0.18 every round is a **ledger fact** you can audit yourself — the 0.19 slice recorded **17 verification rounds to zero blockers** (`jam report production-p1`). Today's mechanisms (0.16+): every sprint carries a **content-bound Codex session transcript** (file↔session identity — the strongest authorship signal a file anchor gives) and is gated by the project's global acceptance command, re-run **live** at FINISH; on git-backed projects each Codex turn runs **isolated in a disposable worktree** (0.17+; non-git projects fall back to in-place editing, loudly). Earlier runs predate the mechanisms that now gate them — the audit reports them against today's stricter bar (`jam report --all`). **The one claim still unproven: a run under live human gate-supervision.** [QUICKSTART.md](QUICKSTART.md) is the script for exactly that run. 467 tests, no dependencies. See [CHANGELOG.md](CHANGELOG.md).
+
+**Two modes.** jam runs in **repair** mode (`jam diagnose` — fix/harden an existing repo through `DIAGNOSE→VERIFY→PLAN→IMPLEMENT→FINISH`) or **greenfield** mode (`jam start --mode greenfield` — build from a raw intent, starting with a `GROUND` phase that produces an evidence-backed, human-ratified grounded-intent). Decision rule: repair = the repo exists and misbehaves; greenfield = the thing doesn't exist yet. The `CONVERGE` phase then converges Claude+Codex on one evidence-backed architecture decision (human-ratified). `SPECIFY` then authors the project's global `verifyCmd` as a human-ratified, un-gameable SSOT (red-first + dimension-coverage + a Codex gameability audit). Finally `BUILD` runs the gated sprint loop against that locked verifyCmd to `FINISH` — the same machinery repair mode uses. The full `intent → GROUND → CONVERGE → SPECIFY → BUILD → FINISH` greenfield loop is complete. Each Codex sprint turn runs in an isolated worktree and only lands in your tree via a gated `jam reconcile` — a timed-out or runaway turn can't touch your working tree.
+
+`verifyCmd` is your acceptance command — the whole bar (tests+lint+types+validators), not just unit tests. Every sprint must pass it; FINISH re-runs it live.
+
+A ledger fact is one JSON line in `ledger.jsonl` recording a state change; the audit re-proves them all before FINISH.
+
+**Stop-hook**: when a gate is unsatisfied, jam's Claude Code hook blocks the agent's turn from ending and shows the gate's reason — the nag is the feature, not a crash.
 
 ## What it enforces
 
@@ -33,7 +41,7 @@ Governing principle: **trust the structure, not the model** (including not trust
 - **Node.js ≥ 18.18**
 - **Codex CLI** installed and authenticated
 - **[`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc)** installed + set up (`/codex:setup`) — jam composes it for adversarial review
-- A **git-trusted** target project (evidence/diffs assume a VCS)
+- A **git repo with ≥1 commit** (evidence/diffs assume a VCS)
 
 ## Install
 
@@ -52,7 +60,7 @@ In Claude Code:
 
 Restart Claude Code to load it. Installed at user level, jam is available in **every** project — but a run only starts when you ask.
 
-**New here? Start with [QUICKSTART.md](QUICKSTART.md).** Worked example: [docs/examples/production-p1.md](docs/examples/production-p1.md).
+Worked example: [docs/examples/production-p1.md](docs/examples/production-p1.md).
 
 ## How you use it
 
@@ -165,7 +173,7 @@ jam covers the *hardening* middle of the lifecycle. Pair it with brainstorming/p
 
 ```bash
 git clone https://github.com/padmanabhaGQM/jam && cd jam
-npm test          # 425 tests, no dependencies (node --test)
+npm test          # 467 tests, no dependencies (node --test)
 # drive the CLI by hand from the clone:
 node plugins/jam/scripts/jam.mjs status
 ```

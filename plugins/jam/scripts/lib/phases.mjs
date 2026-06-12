@@ -9,6 +9,28 @@ import { phaseOrderFor, REQUIRED_GREENFIELD_GATES } from "./mode.mjs";
 
 export { repairPhaseOrder } from "./mode.mjs";
 
+export function nextSprintHint(state) {
+  const sprints = state.plan?.sprints ?? [];
+  if (sprints.length === 0) return "jam build plan --file <plan.json>";
+  const open = sprints.find((sp) => sp.status === "in-progress" && sp.turn && sp.turn.status === "open" && sp.turn.isolated !== false);
+  if (open) return `jam reconcile --sprint ${open.id}`;
+  const inProgress = sprints.find((sp) => sp.status === "in-progress");
+  if (inProgress) {
+    const g = state.gates?.[`sprint-${inProgress.id}`];
+    return g && g.status === "evidence-passed"
+      ? `jam sprint ${inProgress.id} --done`
+      : `jam sprint ${inProgress.id} --verify`;
+  }
+  const done = new Set(sprints.filter((sp) => sp.status === "done").map((sp) => sp.id));
+  const pending = sprints.find((sp) => sp.status === "pending" && (sp.needs ?? []).every((need) => done.has(need)));
+  return pending ? `jam sprint ${pending.id} --start` : null;
+}
+
+function notAllSprintsDoneMessage(state) {
+  const hint = nextSprintHint(state);
+  return `cannot advance from ${state.phase}: not all sprints done${hint ? ` — next: ${hint}` : ""}`;
+}
+
 export function advancePhase(state, { verified = false } = {}) {
   const order = phaseOrderFor(state.mode);
   const i = order.indexOf(state.phase);
@@ -31,7 +53,7 @@ export function advancePhase(state, { verified = false } = {}) {
     throw new Error("advancePhase: the FINISH transition requires live verifyCmd re-verification — call advanceRun, not advancePhase");
   }
   if (state.phase === "IMPLEMENT" || (state.mode === "greenfield" && state.phase === "BUILD")) {
-    if (!allSprintsDone(state)) throw new Error(`cannot advance from ${state.phase}: not all sprints done`);
+    if (!allSprintsDone(state)) throw new Error(notAllSprintsDoneMessage(state));
   }
   if (state.mode === "greenfield") {
     for (const id of (REQUIRED_GREENFIELD_GATES[state.phase] ?? [])) {
@@ -78,7 +100,7 @@ export function advanceRun({ runDir: dir, now }) {
   if (state.phase === "IMPLEMENT" || (state.mode === "greenfield" && state.phase === "BUILD")) {
     // 1. Eligibility: a mid-implementation run must not run the final acceptance command at all.
     //    (Mirrors advancePhase's guard, with the existing message, so it fires BEFORE the live verify.)
-    if (!allSprintsDone(state)) throw new Error(`cannot advance from ${state.phase}: not all sprints done`);
+    if (!allSprintsDone(state)) throw new Error(notAllSprintsDoneMessage(state));
     // 2. Historical ledger honesty (unchanged).
     const audit = auditRun({ runDir: dir });
     if (!audit.ok) throw new Error(`cannot advance to FINISH: audit failed: ${audit.failures.join("; ")}`);

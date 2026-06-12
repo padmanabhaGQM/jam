@@ -37,6 +37,10 @@ test("ratifyAction: matching confirm → ratified; wrong → throws; deny → de
   ratifyAction({ runDir: dir, id: "del-1", confirm: "del-1", now: "t2" });
   assert.equal(readState(dir).gates["action-del-1"].status, "ratified");
   assert.ok(readLedger(dir).some((e) => e.type === "action-ratified" && e.id === "del-1"));
+  assert.throws(
+    () => recordApproval({ runDir: dir, gateId: "action-del-1", who: "user", now: "t2b" }),
+    /already ratified.*approval not applicable/
+  );
   proposeAction({ runDir: dir, id: "del-2", type: "db-drop", now: "t3" });
   ratifyAction({ runDir: dir, id: "del-2", deny: true, now: "t4" });
   assert.equal(readState(dir).actions.find((a) => a.id === "del-2").status, "denied");

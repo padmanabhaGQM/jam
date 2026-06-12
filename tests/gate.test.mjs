@@ -28,7 +28,10 @@ test("unknown gate is not allowed", () => {
 
 test("human block reason names the approve command", () => {
   const s = createInitialState({ runId: "r1", now: "t" });
-  assert.match(evaluateGate(s, "ALIGN").reason, /\/jam:approve ALIGN/);
+  s.gates.ALIGN.status = "rendered";
+  const reason = evaluateGate(s, "ALIGN").reason;
+  assert.match(reason, /jam approve ALIGN/);
+  assert.doesNotMatch(reason, /\/jam:/);
 });
 
 test("currentBlockingGate returns first unsatisfied gate, null when all satisfied", () => {

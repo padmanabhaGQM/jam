@@ -33,15 +33,15 @@ export function validateSprintGraph(sprints) {
 export function validatePlan(plan) {
   const errors = [];
   if (!plan || typeof plan !== "object") return { valid: false, errors: ["plan must be an object"] };
-  if (!plan.verifyCmd || !String(plan.verifyCmd).trim()) errors.push("missing verifyCmd");
+  if (!plan.verifyCmd || !String(plan.verifyCmd).trim()) errors.push('missing verifyCmd — expected { "verifyCmd": "npm test", "sprints": [...] }');
   if (!Array.isArray(plan.sprints) || plan.sprints.length === 0) {
     errors.push("sprints must be a non-empty array");
   } else {
     const ids = new Set();
     plan.sprints.forEach((s, i) => {
       if (!s || typeof s !== "object") { errors.push(`sprint[${i}] must be an object`); return; }
-      if (!s.id) errors.push(`sprint[${i}] missing id`);
-      if (!s.title) errors.push(`sprint[${i}] missing title`);
+      if (!s.id) errors.push(`sprint[${i}] missing id — expected { "id": "s1", "title": "<unit of work>" }`);
+      if (!s.title) errors.push(`sprint[${i}] missing title — expected { "id": "s1", "title": "<unit of work>" }`);
       if (s.id) { if (ids.has(s.id)) errors.push(`duplicate sprint id: ${s.id}`); ids.add(s.id); }
     });
   }

@@ -15,6 +15,8 @@ Start every session with `jam resume`. It prints the active run, phase, blockers
 
 If the environment looks wrong, run `jam doctor` and fix the reported setup issue before continuing. For a full copy-paste supervised run script, see `QUICKSTART.md`.
 
+**Stop-hook:** if a gate is still unsatisfied, jam's Claude Code hook prevents the agent turn from ending cleanly and prints the gate reason. Treat that as the supervisor rail: produce the named artifact, approval, evidence, or ratification, then retry the same transition.
+
 Repair runs create human approval gates only for DIAGNOSE, VERIFY, and PLAN. At each human gate, surface the artifact VERBATIM to the supervisor:
 - DIAGNOSE: show the rendered digest, including detector outputs and any local-scope risk.
 - VERIFY: show the adversarial verdict, including blocker counts and findings.
@@ -22,13 +24,26 @@ Repair runs create human approval gates only for DIAGNOSE, VERIFY, and PLAN. At 
 
 Do not summarize these artifacts as a substitute for review. The supervisor approves the exact digest, verdict, or plan that jam recorded.
 
-Their human-gate verbs are approve and reject:
+Gate status and `approveFrom` mapping:
+
+| approveFrom | Required producer | Status before approval |
+|---|---|---|
+| `rendered` | `jam render-digest <gate> --file <digest.json>` | `rendered` |
+| `verified` | `jam verify --file <verdict.json>` | `verified` |
+| `planned` | `jam plan --file <plan.json>` or `jam build plan --file <plan.json>` | `planned` |
+| `evidence-passed` | `jam sprint <id> --verify` or `jam evidence <gate> --sprint <id> --cmd "<command>"` | `evidence-passed` |
+| `ratified` | `jam ratify <id> --confirm <id>` | `ratified` |
+| `contested` | `jam converge tiebreak --choose <option>` | `contested` |
+
+Two of these rows resolve differently from the rest: a `ratified` gate is RESOLVED by the ratification itself (no `jam approve` after — approval is refused both before and after ratification), and a `contested` gate is resolved by the tiebreak ruling (the ruling records the approval; `jam approve` on it is refused). For every other row the human-gate verbs are approve and reject:
 ```bash
 /jam:approve <gate>
 jam reject <gate> --reason "..."
 ```
 
 A rejection is a standing objection. Nothing advances until the artifact is re-produced and surfaced again. If the artifact is flawed, rewrite it and re-record it; if the direction is wrong, use `jam rewind <phase> --confirm <phase>` and accept that later approvals are invalidated by design.
+
+The greenfield sub-gates use the same status mechanics: `GROUND-scope`, `CONVERGE-shortlist`, `SPECIFY-coverage`, and `BUILD-plan` are checkpoints inside the larger greenfield phases, and all relevant gates for the phase must be satisfied before `jam advance`.
 
 IMPLEMENT has no phase-level human approve/reject gate: close each sprint with the sprint loop verbs (`jam sprint <id> --start`, Codex, `jam reconcile --sprint <id>`, `jam sprint <id> --verify`, `jam sprint <id> --done`). Before `--done`, surface the sprint digest, evidence, transcript/session binding, and global verification result.
 
@@ -53,13 +68,21 @@ jam classifies it by reversibility. Reversible → proceed. **Irreversible** (`d
 jam ratify <id> --confirm <id>     # grant (the phrase must equal the action id)
 jam ratify <id> --deny             # refuse
 ```
-`/jam:approve` cannot open it. `jam cancel` (itself irreversible) requires `--confirm <runId>`. The FINISH audit refuses to pass while any irreversible action is still undecided.
+`/jam:approve` cannot open it. When `jam ratify <id> --confirm <id>` succeeds, the gate status is `ratified` and the gate is resolved immediately; do not run `jam approve` afterward. `jam cancel` (itself irreversible) requires `--confirm <runId>`. The FINISH audit refuses to pass while any irreversible action is still undecided.
 
 **Declare by specific type, not by raw command.** The fail-safe guarantee lives in the *type* allowlist (an unrecognized type requires ratification). The command screen on `--type run` is a best-effort backstop and is deliberately incomplete — shell is open-ended. So declare a destructive operation with its real type (`jam propose-action drop-users --type db-drop`, `--type delete-path`, …), NOT as a generic `--type run "<cmd>"` that hopes the regex catches it. Reserve `--type run` for genuinely safe commands (tests, builds, linters).
 
 **Honest boundary:** this governs *declared* actions plus jam's own destructive ops — it does NOT yet intercept Codex's raw in-turn sandbox shell (the deferred **G0.5** slice). Until then, the orchestrator must declare consequential actions via `propose-action` rather than letting Codex run them unannounced. Likewise, a raw `--type run` command is only pattern-screened, not fully classified — full raw-shell coverage is the G0.5 layer.
 
 ---
+
+## Gate modes
+
+`human` gates require the mapped artifact status plus `jam approve`; `show-and-proceed` gates advance once the artifact is produced; `auto` gates require executable evidence to reach `evidence-passed`. Use `jam dial <gate> --mode <human|show-and-proceed>` only to change strictness deliberately; ratification gates and sprint auto gates are not dial targets.
+
+## Rewind
+
+`jam rewind <phase> --confirm <phase>` moves the process position, not code. It re-arms the target and later gates, preserves the ledger, and if you re-record the plan after rewinding, the sprint set starts a fresh sprint epoch rather than pretending old sprint approvals still apply.
 
 ## DIAGNOSE phase
 
@@ -228,6 +251,7 @@ Work the sprint list **one at a time, in order**. Each sprint is gated by the ru
      --out-dir <run>/codex/<id>
    ```
    The sprint cadence is `--start → codex-run --sprint (runs in an isolated worktree) → jam reconcile --sprint → --verify → --done`. `buildSprintPrompt` instructs Codex to use `superpowers:test-driven-development`, implement **exactly** this sprint, honor active steering directives, and return exact evidence. Passing `--sprint <id>` binds this Codex session (id + transcript) to the sprint — the authorship record step 6 requires. A timed-out ISOLATED sprint turn is not resumed via `codex-resume` — wait for the turn (never killed) and run `jam reconcile --sprint <id>`, or open a fresh superseding `jam codex-run --sprint <id>`. The **Codex-hang protocol** (never-kill + live-thread reconciliation) applies to every engine call here; a timed-out turn is reconciled, not lost, once it completes.
+   A Codex turn is one bounded engine attempt for a sprint or analysis step. Its turn token is the generation marker jam uses to reject stale reconcile attempts after a newer turn supersedes it.
 
 3. **Reconcile the isolated turn.**
    ```bash
@@ -239,7 +263,7 @@ Work the sprint list **one at a time, in order**. Each sprint is gated by the ru
    ```bash
    jam sprint <id> --verify
    ```
-   jam runs the **global `verifyCmd`**; the sprint passes only on exit 0. If it fails, do not force — iterate (more `codex-run` on the same thread) or take a `/jam:steer` directive, then re-verify.
+   jam runs the **global `verifyCmd`**; the sprint auto gate reaches `evidence-passed` only on exit 0. If it fails, do not force — iterate (more `codex-run` on the same thread) or take a `/jam:steer` directive, then re-verify.
 
 5. **Second, non-author check + digest.**
    Run `/codex:adversarial-review` on the diff (an independent read of the change). Render a digest and surface it to the user.

@@ -33,7 +33,7 @@ test("missing global map is invalid", () => {
   assert.equal(validateDigest(d).valid, false);
 });
 
-test("missing coverage delta is invalid", () => {
+test("missing coverage object is invalid", () => {
   const d = validDigest();
   delete d.coverage;
   assert.equal(validateDigest(d).valid, false);

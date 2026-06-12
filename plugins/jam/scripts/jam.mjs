@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 import { readActiveRunId, runsRoot, runDir } from "./lib/paths.mjs";
 import { phaseOrderFor } from "./lib/mode.mjs";
@@ -27,12 +28,14 @@ import { advanceRun } from "./lib/phases.mjs";
 import { recordPlan, promoteSprint } from "./lib/plan.mjs";
 import { startSprint, verifySprint, finishSprint, bindCodexSession, openTurn } from "./lib/sprint.mjs";
 import { auditRun } from "./lib/audit.mjs";
+import { producerHint } from "./lib/gate.mjs";
 import { reportRun, renderReport, renderReportMd } from "./lib/report.mjs";
 import { proposeAction, ratifyAction } from "./lib/action.mjs";
 import { shouldSweepAbandonedWorktree } from "./lib/worktree-sweep.mjs";
 import { evaluateDoctor, gatherProbes, renderDoctor } from "./lib/doctor.mjs";
 import { deriveNextAction } from "./lib/resume.mjs";
 import { renderStatus } from "./lib/render-status.mjs";
+import { COMMAND_META, renderCommandHelp, renderHelp } from "./lib/help.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -102,6 +105,21 @@ function genRunId() {
   return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+const GOAL_TEMPLATE = `# Goal
+<!-- What outcome do you want? One paragraph, plain language. -->
+
+# Why
+<!-- Why now; what breaks or stays broken if we don't do this. -->
+
+# What "done" means
+<!-- The acceptance you trust, e.g. "npm test passes, including a new regression test for the bug". -->
+`;
+
+function printRunAnnouncement(runId) {
+  process.stdout.write(`state lives in docs/superpowers/loop-runs/${runId}/ (local run record — commit it or gitignore it, your call)\n`);
+  process.stdout.write("roles: Codex produces digests/verdicts/code in recorded turns; Claude orchestrates; you approve at gates (jam approve / jam reject)\n");
+}
+
 function cmdStart(cwd, positional, flags) {
   const topic = positional.join(" ").trim();
   if (!topic) fail("usage: jam start <topic> [--mode greenfield]");
@@ -112,14 +130,33 @@ function cmdStart(cwd, positional, flags) {
     const { dir } = requireActiveRun(cwd);
     setGoal({ runDir: dir, text: topic, source: "human" });
     process.stdout.write(`started jam run ${runId} (mode greenfield, phase GROUND, gate GROUND-scope: pending)\n`);
+    printRunAnnouncement(runId);
   } else {
     process.stdout.write(`started jam run ${runId} (phase ALIGN, gate ALIGN: pending)\n`);
+    printRunAnnouncement(runId);
   }
 }
 
 function cmdDoctor(cwd) {
   const r = evaluateDoctor(gatherProbes(cwd));
   process.stdout.write(renderDoctor(r));
+  if (!r.ok) process.exit(1);
+  process.stdout.write('next: jam init (bootstrap) or jam diagnose "<topic>" --goal <file>\n');
+}
+
+function cmdInit(cwd) {
+  const r = evaluateDoctor(gatherProbes(cwd));
+  process.stdout.write(renderDoctor(r));
+  process.stdout.write("\nstate: runs live in docs/superpowers/loop-runs/<run-id>/ (local; commit or gitignore — your call)\n");
+  process.stdout.write("roles: Codex produces digests/verdicts/code in recorded turns; Claude orchestrates; you approve at gates (jam approve / jam reject)\n\n");
+  const goal = path.join(cwd, "jam-goal.md");
+  if (fs.existsSync(goal)) {
+    process.stdout.write("jam-goal.md exists — left untouched\n");
+  } else {
+    fs.writeFileSync(goal, GOAL_TEMPLATE);
+    process.stdout.write("wrote jam-goal.md — fill it in\n");
+  }
+  process.stdout.write('then: jam diagnose "<topic>" --goal jam-goal.md   (repair)\n      jam start "<topic>" --mode greenfield      (new build)\n');
   if (!r.ok) process.exit(1);
 }
 
@@ -129,9 +166,22 @@ function cmdStatus(cwd) {
   process.stdout.write(renderStatus(state, runId));
 }
 
+function cmdNext(cwd) {
+  const id = readActiveRunId(cwd);
+  if (!id) return fail(`no active jam run in this project — start one with 'jam diagnose "<topic>" --goal <file>' (repair) or 'jam start "<topic>" --mode greenfield'`);
+  const state = readState(runDir(cwd, id));
+  process.stdout.write(`next: ${deriveNextAction(state).message}\n`);
+}
+
 function cmdResume(cwd) {
   const id = readActiveRunId(cwd);
-  if (!id) { process.stdout.write("no active run — past runs:\n"); return cmdReport(cwd, [], { all: undefined }); }
+  if (!id) {
+    process.stdout.write('no active run — start one with \'jam diagnose "<topic>" --goal <file>\' (repair) or \'jam start "<topic>" --mode greenfield\'\n');
+    let entries = [];
+    try { entries = fs.readdirSync(runsRoot(cwd), { withFileTypes: true }).filter((d) => d.isDirectory()); } catch {}
+    if (entries.length) return cmdReport(cwd, [], { all: undefined });
+    return;
+  }
   const dir = runDir(cwd, id);
   const st = readState(dir);
   process.stdout.write(renderStatus(st, id));
@@ -182,9 +232,13 @@ function cmdReject(cwd, positional, flags) {
   const order = phaseOrderFor(st.mode);
   const gatePhase = order.find((p) => gateId === p || gateId.startsWith(p + "-"));
   if (gatePhase && order.indexOf(gatePhase) < order.indexOf(st.phase)) {
-    process.stdout.write(`gate ${gateId} rejected — it belongs to the earlier phase ${gatePhase}: re-producing may require 'jam rewind ${gatePhase} --confirm ${gatePhase}' first (phase-bound greenfield producers); repair digest/plan producers can run from any phase\n`);
+    const gEarly = st.gates?.[gateId];
+    const rearEarly = gEarly ? producerHint(gateId, gEarly.approveFrom ?? "rendered", st) : null;
+    process.stdout.write(`gate ${gateId} rejected — it belongs to the earlier phase ${gatePhase}: re-producing${rearEarly ? ` (${rearEarly})` : ""} may require 'jam rewind ${gatePhase} --confirm ${gatePhase}' first (phase-bound greenfield producers); repair digest/plan producers can run from any phase\n`);
   } else {
-    process.stdout.write(`gate ${gateId} rejected — re-produce its artifact, then approve\n`);
+    const gNow = st.gates?.[gateId];
+    const rear = gNow ? producerHint(gateId, gNow.approveFrom ?? "rendered", st) : null;
+    process.stdout.write(`gate ${gateId} rejected — re-produce its artifact${rear ? ` (${rear})` : ""}, then approve\n`);
   }
 }
 
@@ -401,11 +455,12 @@ function cmdCancel(cwd, positional, flags) {
 
 function cmdDiagnose(cwd, positional, flags) {
   const topic = positional.join(" ").trim();
-  if (!topic) fail("usage: jam diagnose <topic> --goal <file>  (or --goal-codex <goalId>)");
+  const diagnoseUsage = 'usage: jam diagnose <topic> --goal <file>  (or --goal-codex <goalId>)\n--goal-codex <goalId> reads the goal text from a Codex-stored goal; most users want --goal <file>';
+  if (!topic) fail(diagnoseUsage);
   let text, source;
   if (flags.goal) {
     try { text = fs.readFileSync(flags.goal, "utf8"); source = `file:${flags.goal}`; }
-    catch (e) { return fail(`cannot read goal file: ${e.message}`); }
+    catch (e) { return fail(`cannot read goal file: ${e.message}\n(the goal file is free-form markdown describing what "done" means)`); }
   } else if (flags["goal-codex"]) {
     const r = spawnSync("python3", ["-c",
       "import sqlite3,sys,os;c=sqlite3.connect(os.path.join(os.path.expanduser('~'),'.codex','goals_1.sqlite'));"+
@@ -413,15 +468,16 @@ function cmdDiagnose(cwd, positional, flags) {
       "print(r[0] if r else '')", flags["goal-codex"]], { encoding: "utf8" });
     text = (r.stdout || "").trim(); source = `codex:${flags["goal-codex"]}`;
   } else {
-    return fail("usage: jam diagnose <topic> --goal <file>  (or --goal-codex <goalId>)");
+    return fail(diagnoseUsage);
   }
   if (!text || !text.trim()) {
-    return fail("goal is empty; provide a non-empty --goal <file> or a valid --goal-codex <goalId>");
+    return fail('goal is empty; provide a non-empty --goal <file> or a valid --goal-codex <goalId>\n--goal-codex <goalId> reads the goal text from a Codex-stored goal; most users want --goal <file>');
   }
   const runId = flags["run-id"] || genRunId();
   createRun({ projectRoot: cwd, runId, topic, mode: "repair" });
   setGoal({ runDir: runDir(cwd, runId), text, source });
   process.stdout.write(`started repair run ${runId} (phase DIAGNOSE, gate DIAGNOSE: pending)\n`);
+  printRunAnnouncement(runId);
 }
 
 function cmdVerify(cwd, positional, flags) {
@@ -506,7 +562,7 @@ function reconcileTurnWorktreeForCli({ repoRoot, worktreePath, baselineRef, head
 }
 
 async function cmdCodexRun(cwd, positional, flags) {
-  if (!flags["prompt-file"]) return fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>] [--sprint <id>]");
+  if (!flags["prompt-file"]) return fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>] [--sprint <id>] — the prompt file is written by the jam-prompting skill (Claude's instructions for this Codex turn)");
   let prompt;
   try { prompt = fs.readFileSync(flags["prompt-file"], "utf8"); } catch (e) { return fail(`cannot read prompt file: ${e.message}`); }
   let outDir = flags["out-dir"] ? path.resolve(cwd, flags["out-dir"]) : fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
@@ -722,6 +778,11 @@ function cmdSprint(cwd, positional, flags) {
       // The gate (not this process's exit code) is what blocks --done. Check stdout / `jam status`.
       const { result } = verifySprint({ runDir: dir, sprintId: id, cwd });
       process.stdout.write(`sprint ${id} verify: exit ${result.exitCode}\n`);
+      if (result.exitCode !== 0) {
+        const tail = `${result.stdout ?? ""}${result.stderr ?? ""}`.split("\n").filter(Boolean).slice(-20).join("\n");
+        if (tail) process.stdout.write(tail + "\n");
+        process.stdout.write(`full output: ${path.join(dir, "evidence", `${id}.json`)} — recorded; --done stays blocked until verifyCmd passes\n`);
+      }
     } else if ("done" in flags) {
       finishSprint({ runDir: dir, sprintId: id });
       process.stdout.write(`sprint ${id}: done\n`);
@@ -820,79 +881,79 @@ function cmdReviewRound(cwd, positional, flags) {
   process.stdout.write(`recorded review-round ${phase} #${round} (blockers=${blockers})\n`);
 }
 
-async function main() {
-  const [sub, ...rest] = process.argv.slice(2);
-  const cwd = process.cwd();
-  const { positional, flags } = parseFlags(rest);
-
-  switch (sub) {
-    case "doctor":
-      return cmdDoctor(cwd);
-    case "start":
-      return cmdStart(cwd, positional, flags);
-    case "ground":
-      return cmdGround(cwd, positional, flags);
-    case "converge":
-      return cmdConverge(cwd, positional, flags);
-    case "specify":
-      return cmdSpecify(cwd, positional, flags);
-    case "build":
-      return cmdBuild(cwd, positional, flags);
-    case "status":
-      return cmdStatus(cwd);
-    case "resume":
-      return cmdResume(cwd);
-    case "render-digest":
-      return cmdRenderDigest(cwd, positional, flags);
-    case "approve":
-      return cmdApprove(cwd, positional);
-    case "reject":
-      return cmdReject(cwd, positional, flags);
-    case "rewind":
-      return cmdRewind(cwd, positional, flags);
-    case "dial":
-      return cmdDial(cwd, positional, flags);
-    case "add-gate":
-      return cmdAddGate(cwd, positional, flags);
-    case "evidence":
-      return cmdEvidence(cwd, positional, flags);
-    case "steer":
-      return cmdSteer(cwd, positional);
-    case "cancel":
-      return cmdCancel(cwd, positional, flags);
-    case "propose-action":
-      return cmdProposeAction(cwd, positional, flags);
-    case "ratify":
-      return cmdRatify(cwd, positional, flags);
-    case "diagnose":
-      return cmdDiagnose(cwd, positional, flags);
-    case "verify":
-      return cmdVerify(cwd, positional, flags);
-    case "advance":
-      return cmdAdvance(cwd);
-    case "codex-run":
-      return cmdCodexRun(cwd, positional, flags);
-    case "reconcile":
-      return cmdReconcile(cwd, positional, flags);
-    case "codex-resume":
-      return cmdCodexResume(cwd, positional, flags);
-    case "codex-status":
-      return cmdCodexStatus(cwd, positional, flags);
-    case "plan":
-      return cmdPlan(cwd, positional, flags);
-    case "promote-sprint":
-      return cmdPromoteSprint(cwd, positional, flags);
-    case "sprint":
-      return cmdSprint(cwd, positional, flags);
-    case "audit":
-      return cmdAudit(cwd);
-    case "report":
-      return cmdReport(cwd, positional, flags);
-    case "review-round":
-      return cmdReviewRound(cwd, positional, flags);
-    default:
-      return fail(`unknown subcommand: ${sub ?? "(none)"}`);
+function cmdHelp(cwd, positional) {
+  const name = positional[0];
+  if (name) {
+    const text = renderCommandHelp(COMMAND_META, name);
+    if (text === null) {
+      process.stderr.write(`unknown command: ${name}\n\n`);
+      process.stdout.write(renderHelp(COMMAND_META));
+      process.exit(1);
+    }
+    process.stdout.write(text);
+    return;
   }
+  process.stdout.write(renderHelp(COMMAND_META));
 }
 
-main().catch((e) => fail(e && e.message ? e.message : String(e)));
+const HANDLERS = {
+  doctor: cmdDoctor,
+  init: cmdInit,
+  start: cmdStart,
+  ground: cmdGround,
+  converge: cmdConverge,
+  specify: cmdSpecify,
+  build: cmdBuild,
+  next: cmdNext,
+  status: cmdStatus,
+  resume: cmdResume,
+  "render-digest": cmdRenderDigest,
+  approve: cmdApprove,
+  reject: cmdReject,
+  rewind: cmdRewind,
+  dial: cmdDial,
+  "add-gate": cmdAddGate,
+  evidence: cmdEvidence,
+  steer: cmdSteer,
+  cancel: cmdCancel,
+  "propose-action": cmdProposeAction,
+  ratify: cmdRatify,
+  diagnose: cmdDiagnose,
+  verify: cmdVerify,
+  advance: cmdAdvance,
+  "codex-run": cmdCodexRun,
+  reconcile: cmdReconcile,
+  "codex-resume": cmdCodexResume,
+  "codex-status": cmdCodexStatus,
+  plan: cmdPlan,
+  "promote-sprint": cmdPromoteSprint,
+  sprint: cmdSprint,
+  audit: cmdAudit,
+  report: cmdReport,
+  "review-round": cmdReviewRound,
+  help: cmdHelp,
+};
+
+function assertRegistryParity() {
+  const meta = Object.keys(COMMAND_META).sort().join(",");
+  const handlers = Object.keys(HANDLERS).sort().join(",");
+  if (meta !== handlers) throw new Error(`command registry drift:\n meta:     ${meta}\n handlers: ${handlers}`);
+}
+
+export async function main(argv = process.argv.slice(2), cwd = process.cwd()) {
+  const [sub, ...rest] = argv;
+  const { positional, flags } = parseFlags(rest);
+  assertRegistryParity();
+  if (!sub || sub === "-h" || sub === "--help") return cmdHelp(cwd, [], flags);
+  const cmd = HANDLERS[sub];
+  if (!cmd) {
+    process.stderr.write(`unknown subcommand: ${sub}\n\n`);
+    process.stdout.write(renderHelp(COMMAND_META));
+    process.exit(1);
+  }
+  return cmd(cwd, positional, flags);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => fail(e && e.message ? e.message : String(e)));
+}

@@ -105,7 +105,7 @@ export function recordVerification({ runDir: dir, gateId, verdict, now }) {
   const hasCount = typeof verdict?.unresolvedBlockers === "number";
   const hasFindings = Array.isArray(verdict?.findings);
   if (!verdict || (!hasCount && !hasFindings)) {
-    throw new Error(`cannot record verification for gate ${gateId}: verdict must include unresolvedBlockers (number) or findings (array)`);
+    throw new Error(`cannot record verification for gate ${gateId}: verdict must include unresolvedBlockers (number) or findings (array) — expected { "unresolvedBlockers": <number>, "findings": [{ "title": "..." }] }`);
   }
   let blockers;
   if (hasCount) {

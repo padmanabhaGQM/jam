@@ -3,25 +3,18 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 import { createRun } from "../plugins/jam/scripts/lib/actions.mjs";
 import { ledgerPath } from "../plugins/jam/scripts/lib/ledger.mjs";
 import { runDir } from "../plugins/jam/scripts/lib/paths.mjs";
 import { readState, statePath, writeState } from "../plugins/jam/scripts/lib/state.mjs";
 import { deriveNextAction } from "../plugins/jam/scripts/lib/resume.mjs";
-
-const CLI = fileURLToPath(new URL("../plugins/jam/scripts/jam.mjs", import.meta.url));
+import { runJam as jam } from "./helpers/jam-main.mjs";
 
 const base = () => ({ mode: "repair", phase: "IMPLEMENT", gates: {}, plan: { verifyCmd: "true", sprints: [] } });
 
 function tmpProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "jam-resume-"));
-}
-
-function jam(cwd, args) {
-  return spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8" });
 }
 
 test("priority 1: open isolated turn -> reconcile hint", () => {
@@ -49,10 +42,10 @@ test("priority 4: blocking gates -> per-approveFrom hints incl. rejected reason"
   const m = (gates) => deriveNextAction({ mode: "repair", phase: "DIAGNOSE", gates, plan: { sprints: [] } }).message;
   assert.match(m({ DIAGNOSE: { mode: "human", status: "pending", approveFrom: "rendered" } }), /render-digest/);
   assert.match(m({ VERIFY: { mode: "human", status: "pending", approveFrom: "verified" } }), /jam verify --file/);
-  assert.match(m({ PLAN: { mode: "human", status: "pending", approveFrom: "planned" } }), /record the plan/i);
+  assert.match(m({ PLAN: { mode: "human", status: "pending", approveFrom: "planned" } }), /jam plan --file/);
   assert.match(m({ "action-x": { mode: "human", status: "pending", approveFrom: "ratified" } }), /jam ratify/);
   assert.match(m({ DIAGNOSE: { mode: "human", status: "rejected", rejectedReason: "redo", approveFrom: "rendered" } }), /rejected: redo/);
-  assert.match(m({ DIAGNOSE: { mode: "human", status: "rendered", approveFrom: "rendered" } }), /jam:approve DIAGNOSE/);
+  assert.match(m({ DIAGNOSE: { mode: "human", status: "rendered", approveFrom: "rendered" } }), /jam approve DIAGNOSE/);
 });
 
 test("terminal action gates (denied/ratified) never shadow the real next action", () => {
@@ -63,7 +56,7 @@ test("terminal action gates (denied/ratified) never shadow the real next action"
     DIAGNOSE: { mode: "human", status: "rendered", approveFrom: "rendered" },
   };
   s.actions = [{ id: "x", status: "denied", irreversible: true }];
-  assert.match(deriveNextAction(s).message, /jam:approve DIAGNOSE/);
+  assert.match(deriveNextAction(s).message, /jam approve DIAGNOSE/);
   s.actions = [{ id: "x", status: "proposed", irreversible: true }];
   s.gates["action-x"].status = "pending";
   assert.match(deriveNextAction(s).message, /jam ratify/);
@@ -77,7 +70,7 @@ test("priority 5/6: all sprints done -> advance; FINISH -> complete", () => {
   assert.match(deriveNextAction({ ...base(), phase: "FINISH" }).message, /complete.*jam report/i);
 });
 
-test("jam resume is read-only for state.json and ledger.jsonl", () => {
+test("jam resume is read-only for state.json and ledger.jsonl", async () => {
   const root = tmpProject();
   createRun({ projectRoot: root, runId: "r1", topic: "x", mode: "repair", now: "t0" });
   const dir = runDir(root, "r1");
@@ -87,7 +80,7 @@ test("jam resume is read-only for state.json and ledger.jsonl", () => {
 
   const beforeState = fs.readFileSync(statePath(dir));
   const beforeLedger = fs.readFileSync(ledgerPath(dir));
-  const r = jam(root, ["resume"]);
+  const r = await jam(root, ["resume"]);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /run r1/);
   assert.match(r.stdout, /next:/);

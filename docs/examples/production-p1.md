@@ -1,5 +1,13 @@
 # Worked example: the production-p1 run
 
+## In plain English
+
+This run added jam's reject, rewind, and dial controls.
+A verification round is one adversarial Codex review pass over the proposed plan or slice.
+A blocker is a defect the reviewer can prove from the repo or run evidence.
+Seventeen rounds to zero means review kept finding real defects until it could not; that is the system working, not failing.
+A turn is one Codex work attempt bound to a sprint, session, transcript, and reconcile result.
+
 The production-p1 slice built jam's reject/rewind/dial commands; its PLAN went through **17 recorded adversarial verification rounds** before any code (the ledger proves the rounds and their blocker counts — reviewer identity is process provenance, not a ledger field; the review turns were driven through the Codex pipeline).
 
 The blocker counts per VERIFY round were `6,4,4,1,1,3,5,1,3,1,1,1,1,2,2,2,0`. The slice then ran 6 sprints, each Codex-authored in an isolated worktree; 2 whole-slice review rounds with blockers `2,0`; and FINISH gated by the live acceptance run.

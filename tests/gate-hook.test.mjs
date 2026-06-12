@@ -3,12 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 import { createRun, recordDigest, recordApproval } from "../plugins/jam/scripts/lib/actions.mjs";
-
-const HOOK = fileURLToPath(new URL("../plugins/jam/scripts/gate-hook.mjs", import.meta.url));
+import { decorateReason, decisionForCwd } from "../plugins/jam/scripts/gate-hook.mjs";
 
 function tmpProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "jam-hook-"));
@@ -23,10 +20,8 @@ function validDigest() {
   };
 }
 function runHook(cwd) {
-  return spawnSync(process.execPath, [HOOK], {
-    input: JSON.stringify({ cwd }),
-    encoding: "utf8"
-  });
+  const decision = decisionForCwd(cwd);
+  return { stdout: decision ? `${JSON.stringify({ ...decision, reason: decorateReason(decision.reason) })}\n` : "" };
 }
 
 test("hook allows (no output) when there is no active run", () => {
@@ -40,7 +35,7 @@ test("hook BLOCKS when the active run's ALIGN gate is unsatisfied", () => {
   const r = runHook(root);
   const payload = JSON.parse(r.stdout);
   assert.equal(payload.decision, "block");
-  assert.match(payload.reason, /jam:approve ALIGN/);
+  assert.match(payload.reason, /jam render-digest ALIGN --file <digest\.json>/);
 });
 
 test("hook ALLOWS once the gate is rendered + approved", () => {
@@ -70,4 +65,5 @@ test("hook BLOCKS a rendered-but-not-approved human gate", () => {
   const payload = JSON.parse(r.stdout);
   assert.equal(payload.decision, "block");
   assert.match(payload.reason, /approval/);
+  assert.match(payload.reason, /jam approve ALIGN \(in Claude Code: \/jam:approve ALIGN\)/);
 });

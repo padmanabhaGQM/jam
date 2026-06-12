@@ -7,6 +7,7 @@
  */
 import fs from "node:fs";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 import { readActiveRunId, runDir } from "./lib/paths.mjs";
 import { readState } from "./lib/state.mjs";
@@ -21,42 +22,50 @@ function readHookInput() {
   }
 }
 
-function emitDecision(payload) {
-  process.stdout.write(JSON.stringify(payload) + "\n");
+export function decorateReason(reason) {
+  return typeof reason === "string"
+    ? reason.replace(/\bjam approve (\S+)/g, "jam approve $1 (in Claude Code: /jam:approve $1)")
+    : reason;
 }
 
-function main() {
-  const input = readHookInput();
-  const cwd = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
-
+export function decisionForCwd(cwd) {
   const runId = readActiveRunId(cwd);
-  if (!runId) return; // no active run → allow
+  if (!runId) return null;
 
   let state;
   try {
     state = readState(runDir(cwd, runId));
   } catch (err) {
-    // An ACTIVE run exists but its state is unreadable/corrupt. Do NOT silently
-    // pass an unsatisfied run — surface it and block, with an escape hatch.
-    // (Truly unexpected hook bugs still fail open via the outer catch below,
-    // so a session is never wedged by a hook malfunction.)
-    emitDecision({
+    return {
       decision: "block",
       reason: `jam run ${runId} state is unreadable (${String(err?.message ?? err)}). Repair docs/superpowers/loop-runs/${runId}/state.json or run /jam:cancel.`
-    });
-    return;
+    };
   }
 
   const blocking = currentBlockingGate(state);
-  if (!blocking) return; // all gates satisfied → allow
+  if (!blocking) return null;
 
   const { reason } = evaluateGate(state, blocking);
-  emitDecision({ decision: "block", reason: `jam gate not satisfied — ${reason}` });
+  return { decision: "block", reason: `jam gate not satisfied — ${reason}` };
 }
 
-try {
-  main();
-} catch (error) {
-  // fail-safe: never wedge the session on hook error
-  process.stderr.write(String(error?.message ?? error) + "\n");
+function emitDecision(payload) {
+  const reason = decorateReason(payload.reason);
+  process.stdout.write(JSON.stringify({ ...payload, reason }) + "\n");
+}
+
+function main() {
+  const input = readHookInput();
+  const cwd = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const decision = decisionForCwd(cwd);
+  if (decision) emitDecision(decision);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    main();
+  } catch (error) {
+    // fail-safe: never wedge the session on hook error
+    process.stderr.write(String(error?.message ?? error) + "\n");
+  }
 }

@@ -1,6 +1,8 @@
 # jam Quickstart — your first supervised run
 
-jam lets you supervise while the models work: Claude proposes and reviews, Codex implements, and the ledger proves what happened. You approve or reject every human gate; jam records those decisions, re-runs the project acceptance command, and leaves you with an auditable run report.
+jam lets you supervise while the models work: Claude (Anthropic) proposes and reviews, Codex (OpenAI) implements, and the ledger proves what happened. You approve or reject every human gate; jam records those decisions, re-runs the project acceptance command, and leaves you with an auditable run report.
+
+Read [HOW-JAM-WORKS.md](HOW-JAM-WORKS.md) first if the phase names, gates, or sprint loop are new to you.
 
 ## 1. Install
 
@@ -66,7 +68,7 @@ Codex edits a disposable copy; changes land only through a gated reconcile. Your
 
 jam never pushes. It stops at FINISH with the acceptance command green and the ledger auditable.
 
-Choose a small, real repair target with an acceptance command you trust:
+Choose a small, real repair target with an acceptance command you trust. You need an acceptance command you trust — if no failing test exists for the bug, write one first:
 
 ```bash
 npm test
@@ -88,11 +90,20 @@ jam diagnose "fix the issue in jam-goal.md" --goal jam-goal.md
 
 At every human gate, read the full artifact before approving. If the artifact is wrong, reject it with a reason; a rejection is a standing objection until the artifact is re-produced.
 
+For the first gate, render and read the digest before deciding:
+
+```bash
+jam render-digest DIAGNOSE --file diag.json
+jam status
+```
+
+Read `diag.json` and the rendered gate details from `jam status`, then approve only if the diagnosis is right. Use CLI spelling first: `jam approve DIAGNOSE` (in Claude Code: /jam:approve).
+
 | Phase | What the model produces | What you read | Your verbs |
 |---|---|---|---|
-| `DIAGNOSE` | Root cause plus a 4-detector digest | The digest, cited evidence, active steering, and diagnosis scope | `/jam:approve DIAGNOSE` or `jam reject DIAGNOSE --reason "..."` |
-| `VERIFY` | Adversarial review verdict | Surviving blockers, if any, and the evidence behind them | `/jam:approve VERIFY` or `jam reject VERIFY --reason "..."` |
-| `PLAN` | Sprint DAG plus global `verifyCmd` | Sprint boundaries, dependencies, acceptance criteria, and whether `verifyCmd` is the whole bar | `/jam:approve PLAN` or `jam reject PLAN --reason "..."` |
+| `DIAGNOSE` | Root cause plus a 4-detector digest | The digest, cited evidence, active steering, and diagnosis scope | `jam approve DIAGNOSE` or `jam reject DIAGNOSE --reason "..."` |
+| `VERIFY` | Adversarial review verdict | Surviving blockers, if any, and the evidence behind them | `jam approve VERIFY` or `jam reject VERIFY --reason "..."` |
+| `PLAN` | Sprint DAG plus global `verifyCmd` | Sprint boundaries, dependencies, acceptance criteria, and whether `verifyCmd` is the whole bar | `jam approve PLAN` or `jam reject PLAN --reason "..."` |
 | `IMPLEMENT` | Codex-authored sprint diffs and verification evidence | Sprint status, reconcile result, global verification output, and provenance | Loop `jam sprint <id> --start`, Codex, `jam reconcile --sprint <id>`, `jam sprint <id> --verify`, then `jam sprint <id> --done` per sprint |
 | `FINISH` | Audit and report | Final verification, audit result, ledger facts, and any promoted scope | Run `jam advance` after all sprints are done; inspect the result with `jam report` |
 
@@ -108,13 +119,7 @@ Read the next action hint:
 jam resume
 ```
 
-Approve a good gate from Claude Code:
-
-```text
-/jam:approve DIAGNOSE
-```
-
-Or approve by CLI:
+Approve a good gate:
 
 ```bash
 jam approve DIAGNOSE
@@ -140,13 +145,13 @@ The sprint loop is the same every time:
 jam sprint fix-1 --start
 ```
 
-2. Let Codex work in an isolated turn.
+2. Let Codex work in an isolated turn. Claude writes the prompt file via the **jam-prompting** skill — you just pass the path.
 
 ```bash
 jam codex-run --sprint fix-1 --prompt-file prompt.md --timeout 600000 --out-dir .jam/codex/fix-1
 ```
 
-3. If the turn timed out but later completed, reconcile it.
+3. Reconcile the isolated turn back into your working tree.
 
 ```bash
 jam reconcile --sprint fix-1
@@ -198,7 +203,7 @@ A Codex turn timed out:
 jam codex-status --event-log .jam/codex/fix-1/events.jsonl
 ```
 
-That timeout is not a failure. jam never kills the process. When the turn completes, reconcile it:
+That timeout is not a failure. jam never kills the process. When the turn completes, use the same happy-path reconcile command:
 
 ```bash
 jam reconcile --sprint fix-1
@@ -210,7 +215,7 @@ The environment changed or Codex auth looks wrong:
 jam doctor
 ```
 
-The implementation exposed necessary extra work:
+The implementation exposed necessary extra work. Promote when verify or review reveals required work outside the approved plan:
 
 ```bash
 jam promote-sprint fix-2 --title "Cover the missed edge case" --reason "The verified fix exposed an unplanned edge case."

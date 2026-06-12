@@ -195,7 +195,7 @@ export function writeState(dir, state) {
 
 export function getGate(state, gateId) {
   const g = state.gates[gateId];
-  if (!g) throw new Error(`unknown gate: ${gateId}`);
+  if (!g) throw new Error(`unknown gate: ${gateId} (known gates: ${Object.keys(state.gates ?? {}).join(", ") || "none"})`);
   return g;
 }
 

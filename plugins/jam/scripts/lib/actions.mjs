@@ -6,6 +6,7 @@ import { appendLedger } from "./ledger.mjs";
 import { runVerification, captureEvidence } from "./evidence.mjs";
 import { validateDigest } from "./digest.mjs";
 import { runDir, runsRoot, activePointerPath } from "./paths.mjs";
+import { producerHint } from "./gate.mjs";
 
 function nowIso(now) {
   return now ?? new Date().toISOString();
@@ -54,9 +55,16 @@ export function recordApproval({ runDir: dir, gateId, who, now }) {
     throw new Error(`cannot approve gate ${gateId}: approval applies only to human gates (mode=${g.mode})`);
   }
   const need = g.approveFrom ?? "rendered";
+  if (need === "contested") {
+    throw new Error(`cannot approve gate ${gateId}: tiebreak gates are resolved by the ruling, not approval — rule it: jam converge tiebreak --choose <option>`);
+  }
+  if (need === "ratified" && g.status === "ratified") {
+    throw new Error(`cannot approve gate ${gateId}: already ratified — resolved, approval not applicable`);
+  }
   if (g.status !== need) {
-    const what = need === "verified" ? "not verified yet" : need === "planned" ? "plan not recorded yet" : need === "ratified" ? "not ratified yet — irreversible actions need `jam ratify`, not `/jam:approve`" : need === "scoped" ? "intent not scoped yet — run `jam ground sharpen`" : need === "grounded" ? "grounding not converged yet — run `jam ground converge`" : need === "shortlisted" ? "shortlist not set yet — run `jam converge shortlist`" : need === "contested" ? "tiebreak not ruled yet — run `jam converge tiebreak --choose <opt>`" : need === "decided" ? "decision not finalized yet — run `jam converge finalize`" : need === "covered" ? "coverage not set yet — run `jam specify coverage`" : need === "specified" ? "verifyCmd not certified yet — run `jam specify certify`" : "digest not rendered yet";
-    throw new Error(`cannot approve gate ${gateId}: ${what} (status=${g.status}, needs ${need})`);
+    const what = need === "verified" ? "not verified yet" : need === "planned" ? "plan not recorded yet" : need === "ratified" ? "not ratified yet — irreversible actions need `jam ratify`, not approval" : need === "scoped" ? "intent not scoped yet" : need === "grounded" ? "grounding not converged yet" : need === "shortlisted" ? "shortlist not set yet" : need === "decided" ? "decision not finalized yet" : need === "covered" ? "coverage not set yet" : need === "specified" ? "verifyCmd not certified yet" : "digest not rendered yet";
+    const hint = producerHint(gateId, need, state);
+    throw new Error(`cannot approve gate ${gateId}: ${what} (status=${g.status}, needs ${need})${hint ? ` — produce it first: ${hint}` : ""}`);
   }
   g.status = "approved";
   g.approvedBy = who ?? "user";
