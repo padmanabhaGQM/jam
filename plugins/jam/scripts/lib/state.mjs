@@ -86,6 +86,13 @@ export function validateState(state) {
     if ("needs" in sp && (!Array.isArray(sp.needs) || sp.needs.some((n) => typeof n !== "string"))) {
       errors.push(`sprint ${sp.id}: needs must be an array of sprint ids`);
     }
+    if ("allowedPaths" in sp) {
+      if (!Array.isArray(sp.allowedPaths) || sp.allowedPaths.length === 0) {
+        errors.push(`sprint ${sp.id}: allowedPaths must be a non-empty array of path globs (omit it for no restriction)`);
+      } else if (sp.allowedPaths.some((g) => typeof g !== "string" || !g.trim())) {
+        errors.push(`sprint ${sp.id}: allowedPaths entries must be non-empty strings`);
+      }
+    }
     if (sp.status === "done" && !(sp.codexSessions ?? []).length) {
       errors.push(`sprint ${sp.id}: status is done but has no bound Codex session`);
     }

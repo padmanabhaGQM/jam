@@ -213,8 +213,9 @@ jam ratify <id> --deny             # refuse
 4. **Record + gate.**
    Write `plan.json` with the shape:
    ```json
-   { "verifyCmd": "...", "sprints": [{ "id": "...", "title": "...", "acceptanceCriteria": "..." }] }
+   { "verifyCmd": "...", "sprints": [{ "id": "...", "title": "...", "acceptanceCriteria": "...", "allowedPaths": ["src/**"] }] }
    ```
+   `allowedPaths` is optional. Use it when a sprint has a natural file boundary.
    Then record it and flip the PLAN gate:
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/scripts/jam.mjs" plan --file plan.json
@@ -286,6 +287,10 @@ Advancing to FINISH also runs the **run-honesty audit** (`jam audit`): it re-che
 If implementation surfaces scope beyond the approved plan — a new sprint Codex or the diagnosis reveals — it must be **promoted**, never silently worked: `jam promote-sprint <id> --title <t> --reason <why>`. A promotion is recorded (provenance `promoted` + a `promotions` decision) and surfaced in `jam status`; `startSprint` refuses scope with no provenance and the FINISH audit refuses a `promoted` sprint with no decision trail. Promoting adds an undone sprint, so FINISH correctly waits for the new scope to be implemented, verified, and done.
 
 Sprints form a **dependency DAG**: a sprint declares `needs: [ids]` (in `plan.json`, or via `jam promote-sprint … --needs a,b`) and cannot `--start` until its dependencies are `done`. The graph must be acyclic — a cyclic or dangling-reference plan is rejected at PLAN, and a promotion that would create a cycle is refused — and the FINISH audit proves the recorded order was honored (no sprint started before a dependency finished). `jam status` shows each sprint as `(ready)` or `(blocked)`; work the ready ones in dependency order.
+
+### Scope-locking a sprint
+
+When a sprint has an intended file boundary, declare `allowedPaths` on that sprint in `plan.json`; for promoted scope, use `jam promote-sprint ... --allow "glob,glob"`. Prompt-only scope control is unreliable: the visualmind proof run showed a turn can still make a valid fix while also drifting into unrelated files. `allowedPaths` makes the boundary structural at reconcile: jam applies only matching paths, strips out-of-scope edits, prints a loud `scope-stripped` line, and records a `turn-scope-stripped` ledger entry naming dropped and kept paths.
 
 ---
 

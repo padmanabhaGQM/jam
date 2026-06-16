@@ -5,6 +5,11 @@ All notable changes to **jam** are documented here. Versions follow the plugin's
 full loop has been driven end-to-end with real Codex on a controlled repo (see 0.6.1+);
 a hard repair under human gate-supervision is not yet proven.
 
+## 0.22.0 — Sprint file allowlists
+- Sprint `allowedPaths` are now structural at reconcile: out-of-scope turn edits are stripped instead of applied, with a loud `turn-scope-stripped` ledger entry naming dropped and kept paths.
+- Added the visualmind-proof-run mirror driver: a fake-Codex e2e edits both an allowed fix file and an out-of-scope creep file, then proves CLI reconcile keeps the fix, drops the creep, and verifies the sprint.
+- Full test suite: 490 tests, all passing.
+
 ## 0.21.0 — Usability-1: CLI-first newcomer path + drift closure
 - `jam help` is registry-driven, so command discovery, per-command usage, and JSON shapes come from one source; `jam next` prints the single copy-pasteable next action, and `jam init` runs the doctor preflight, explains where run state lives and who produces what, and writes a `jam-goal.md` template (never overwriting an existing one).
 - The guidance chain now uses `producerHint` end to end: refusals name the producing command, CLI spelling is consistent, sprint verify failures show the evidence tail, and Exceptions A/B are documented in behavior (`ratified` resolves hard-block gates without `jam approve`; aggregate command hints match executable forms).

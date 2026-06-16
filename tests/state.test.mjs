@@ -48,6 +48,30 @@ test("validateState rejects bad status", () => {
   assert.ok(validateState(s).some((e) => /invalid status/.test(e)));
 });
 
+test("validateState accepts absent or valid sprint allowedPaths", () => {
+  const absent = createInitialState({ runId: "r1", now: "t" });
+  absent.plan = { verifyCmd: "true", sprints: [{ id: "s1", title: "t", status: "pending" }] };
+  assert.deepEqual(validateState(absent), []);
+
+  const valid = createInitialState({ runId: "r2", now: "t" });
+  valid.plan = { verifyCmd: "true", sprints: [{ id: "s1", title: "t", status: "pending", allowedPaths: ["lib/**"] }] };
+  assert.deepEqual(validateState(valid), []);
+});
+
+test("validateState rejects malformed sprint allowedPaths", () => {
+  const nonString = createInitialState({ runId: "r1", now: "t" });
+  nonString.plan = { verifyCmd: "true", sprints: [{ id: "s1", title: "t", status: "pending", allowedPaths: [123] }] };
+  assert.ok(validateState(nonString).some((e) => /allowedPaths entries must be non-empty strings/.test(e)));
+
+  const emptyArray = createInitialState({ runId: "r2", now: "t" });
+  emptyArray.plan = { verifyCmd: "true", sprints: [{ id: "s1", title: "t", status: "pending", allowedPaths: [] }] };
+  assert.ok(validateState(emptyArray).some((e) => /allowedPaths must be a non-empty array/.test(e)));
+
+  const nonArray = createInitialState({ runId: "r3", now: "t" });
+  nonArray.plan = { verifyCmd: "true", sprints: [{ id: "s1", title: "t", status: "pending", allowedPaths: "lib/**" }] };
+  assert.ok(validateState(nonArray).some((e) => /allowedPaths must be a non-empty array/.test(e)));
+});
+
 test("writeState/readState round-trips atomically", () => {
   const root = tmpProject();
   const dir = runDir(root, "r1");

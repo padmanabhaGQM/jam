@@ -33,7 +33,8 @@ export function renderStatus(state, runId) {
       const blocked = sp.status === "pending" && needs.some((n) => !done.has(n));
       const tag = sp.status === "pending" ? (blocked ? " (blocked)" : " (ready)") : "";
       const needsStr = needs.length ? ` needs:${needs.join(",")}` : "";
-      lines.push(`  sprint ${sp.id}: ${sp.status} [${sp.provenance ?? "?"}]${needsStr}${tag} — ${sp.title}`);
+      const allowedStr = Array.isArray(sp.allowedPaths) && sp.allowedPaths.length ? ` allowed: ${sp.allowedPaths.join(", ")}` : "";
+      lines.push(`  sprint ${sp.id}: ${sp.status} [${sp.provenance ?? "?"}]${needsStr}${tag} — ${sp.title}${allowedStr}`);
       for (const cs of sp.codexSessions ?? []) {
         lines.push(`      codex: ${cs.sessionId} (${cs.transcriptPath ? "transcript" : "no-transcript"})`);
       }

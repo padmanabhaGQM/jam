@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { partitionTouched } from "./globmatch.mjs";
 
 function git(repoRoot, args, opts = {}) {
   const r = spawnSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", ...opts });
@@ -128,18 +129,24 @@ export function openTurnWorktree({ repoRoot, sprintId, token, runId, maxBlobByte
 // jam internals are NEVER reconciled (a turn that ran `jam` in its worktree must not push loop-runs/ACTIVE,
 // state, ledger, or .jam scratch back into the controller tree).
 const RECONCILE_EXCLUDES = ["--", ".", ":(exclude).jam/**", ":(exclude)docs/superpowers/loop-runs/**"];
-export function reconcileTurnWorktree({ repoRoot, worktreePath, baselineRef, headAtOpen }) {
+export function reconcileTurnWorktree({ repoRoot, worktreePath, baselineRef, headAtOpen, allowedPaths }) {
   if (!worktreePath || !baselineRef || !fs.existsSync(worktreePath)) return { applied: false, error: "missing worktree or baseline" };
   // A linked worktree shares the controller's refs; an ordinary commit only moves the worktree's detached HEAD,
   // but a turn that deliberately ran `git update-ref`/`git push .` could have moved the controller branch.
   // Detect it: refuse to reconcile onto a controller whose HEAD moved during the turn.
   if (headAtOpen && git(repoRoot, ["rev-parse", "HEAD"]).stdout.trim() !== headAtOpen) return { applied: false, headMoved: true };
   if (git(worktreePath, ["add", "-A"]).code !== 0) return { applied: false, error: "git add failed in worktree" };
-  const nd = git(worktreePath, ["diff", "--cached", "--name-only", "-z", baselineRef, ...RECONCILE_EXCLUDES]);
+  // --no-renames when an allowlist is set, so a rename is reported as its delete+add halves (each then
+  // partitioned independently); without an allowlist, keep today's diff exactly.
+  const ndArgs = (Array.isArray(allowedPaths) && allowedPaths.length)
+    ? ["diff", "--cached", "--name-only", "-z", "--no-renames", baselineRef, ...RECONCILE_EXCLUDES]
+    : ["diff", "--cached", "--name-only", "-z", baselineRef, ...RECONCILE_EXCLUDES];
+  const nd = git(worktreePath, ndArgs);
   if (nd.code !== 0) return { applied: false, error: "git diff (names) failed" };
-  const names = nd.stdout.split("\0").filter(Boolean);
-  if (names.length === 0) return { applied: false, empty: true };   // genuine no-op (a real failure returns {error} above)
-  if (names.some((p) => p.includes("\n"))) return { applied: false, error: "touched path contains a newline — refusing to reconcile" };
+  const allNames = nd.stdout.split("\0").filter(Boolean);
+  if (allNames.some((p) => p.includes("\n"))) return { applied: false, error: "touched path contains a newline — refusing to reconcile" };
+  const { kept: names, dropped } = partitionTouched(allNames, allowedPaths);   // strip out-of-scope
+  if (names.length === 0) return { applied: false, empty: true, dropped, kept: [] };  // nothing in-scope (or genuine no-op)
   // path-level drift by CONTENT HASH (not `git diff baselineRef`, which falsely reports a baseline-captured
   // UNTRACKED file as deleted): each touched path's current main-tree content must equal its baseline blob.
   for (const p of names) {
@@ -147,22 +154,30 @@ export function reconcileTurnWorktree({ repoRoot, worktreePath, baselineRef, hea
     const baseId = bp.code === 0 ? bp.stdout.trim() : null;          // null = path absent in baseline (turn adds it)
     const abs = path.join(repoRoot, p);
     const mainId = fs.existsSync(abs) ? git(repoRoot, ["hash-object", abs]).stdout.trim() : null;
-    if (baseId !== mainId) return { applied: false, drift: true, path: p };
+    if (baseId !== mainId) return { applied: false, drift: true, path: p, dropped, kept: names };
   }
-  const pd = git(worktreePath, ["diff", "--cached", "--binary", baselineRef, ...RECONCILE_EXCLUDES]);
+  // patch the KEPT paths only (explicit pathspec instead of "." so dropped changes never land)
+  // Build the apply patch. With NO allowlist, use the original diff unchanged (native rename handling,
+  // byte-identical behavior). WITH an allowlist, we patch explicit kept paths — so use --no-renames on
+  // BOTH the name diff (above) and here, turning a rename into a delete+add PAIR (both appear in `names`,
+  // both get patched); and use :(literal) so a glob-metachar filename can't re-include a dropped sibling.
+  const stripping = Array.isArray(allowedPaths) && allowedPaths.length > 0;
+  const pd = stripping
+    ? git(worktreePath, ["diff", "--cached", "--binary", "--no-renames", baselineRef, "--", ...names.map((n) => `:(literal)${n}`)])
+    : git(worktreePath, ["diff", "--cached", "--binary", baselineRef, ...RECONCILE_EXCLUDES]);
   if (pd.code !== 0) return { applied: false, error: "git diff (patch) failed" };
   const patch = pd.stdout;
   const patchFile = path.join(os.tmpdir(), `jam-patch-${process.pid}-${Date.now()}.diff`);
   try {
     fs.writeFileSync(patchFile, patch);
     const check = spawnSync("git", ["-C", repoRoot, "apply", "--check", patchFile], { encoding: "utf8" });
-    if ((check.status ?? -1) !== 0) return { applied: false, drift: true, stderr: check.stderr ?? "" };
+    if ((check.status ?? -1) !== 0) return { applied: false, drift: true, stderr: check.stderr ?? "", dropped, kept: names };
     const apply = spawnSync("git", ["-C", repoRoot, "apply", patchFile], { encoding: "utf8" });
-    if ((apply.status ?? -1) !== 0) return { applied: false, error: apply.stderr ?? "" };
+    if ((apply.status ?? -1) !== 0) return { applied: false, error: apply.stderr ?? "", dropped, kept: names };
   } finally {
     try { fs.rmSync(patchFile, { force: true }); } catch {}
   }
-  return { applied: true };
+  return { applied: true, kept: names, dropped };
 }
 
 // Only call on a COMPLETED turn. Never rm -rf — a never-killed turn may still hold the dir; deleting it

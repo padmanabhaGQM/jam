@@ -43,6 +43,13 @@ export function validatePlan(plan) {
       if (!s.id) errors.push(`sprint[${i}] missing id — expected { "id": "s1", "title": "<unit of work>" }`);
       if (!s.title) errors.push(`sprint[${i}] missing title — expected { "id": "s1", "title": "<unit of work>" }`);
       if (s.id) { if (ids.has(s.id)) errors.push(`duplicate sprint id: ${s.id}`); ids.add(s.id); }
+      if ("allowedPaths" in s) {
+        if (!Array.isArray(s.allowedPaths) || s.allowedPaths.length === 0) {
+          errors.push(`sprint ${s.id ?? i}: allowedPaths must be a non-empty array of path globs (omit it for no restriction)`);
+        } else if (s.allowedPaths.some((g) => typeof g !== "string" || !g.trim())) {
+          errors.push(`sprint ${s.id ?? i}: allowedPaths entries must be non-empty strings`);
+        }
+      }
     });
   }
   if (Array.isArray(plan.sprints)) errors.push(...validateSprintGraph(plan.sprints));
@@ -61,7 +68,7 @@ export function recordPlan({ runDir: dir, plan, now }) {
   for (const id of Object.keys(state.gates)) if (id.startsWith("sprint-")) delete state.gates[id];
   state.plan = {
     verifyCmd: plan.verifyCmd,
-    sprints: plan.sprints.map((s) => ({ id: s.id, title: s.title, acceptanceCriteria: s.acceptanceCriteria ?? "", status: "pending", provenance: "planned", needs: Array.isArray(s.needs) ? s.needs : [] }))
+    sprints: plan.sprints.map((s) => ({ id: s.id, title: s.title, acceptanceCriteria: s.acceptanceCriteria ?? "", status: "pending", provenance: "planned", needs: Array.isArray(s.needs) ? s.needs : [], ...(Array.isArray(s.allowedPaths) && s.allowedPaths.length ? { allowedPaths: s.allowedPaths } : {}) }))
   };
   g.status = "planned";
   writeState(dir, state);
@@ -69,7 +76,7 @@ export function recordPlan({ runDir: dir, plan, now }) {
   return state;
 }
 
-export function promoteSprint({ runDir: dir, id, title, acceptanceCriteria, discoveredBy, reason, needs, now }) {
+export function promoteSprint({ runDir: dir, id, title, acceptanceCriteria, discoveredBy, reason, needs, allowedPaths, now }) {
   const state = readState(dir);
   if (state.phase !== "IMPLEMENT") throw new Error(`cannot promote a sprint: phase is ${state.phase}, not IMPLEMENT`);
   if (!id || !title) throw new Error("promote-sprint requires id and title");
@@ -78,7 +85,7 @@ export function promoteSprint({ runDir: dir, id, title, acceptanceCriteria, disc
   const sprints = state.plan?.sprints ?? [];
   if (sprints.some((s) => s.id === id)) throw new Error(`sprint ${id} already exists`);
   const at = now ?? new Date().toISOString();
-  const candidate = [...sprints, { id, title, acceptanceCriteria: acceptanceCriteria ?? "", status: "pending", provenance: "promoted", needs: Array.isArray(needs) ? needs : [] }];
+  const candidate = [...sprints, { id, title, acceptanceCriteria: acceptanceCriteria ?? "", status: "pending", provenance: "promoted", needs: Array.isArray(needs) ? needs : [], ...(Array.isArray(allowedPaths) && allowedPaths.length ? { allowedPaths } : {}) }];
   const gErrors = validateSprintGraph(candidate);
   if (gErrors.length) throw new Error(`promotion creates an invalid sprint graph: ${gErrors.join("; ")}`);
   state.plan.sprints = candidate;

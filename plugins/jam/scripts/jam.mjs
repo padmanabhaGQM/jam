@@ -36,6 +36,7 @@ import { evaluateDoctor, gatherProbes, renderDoctor } from "./lib/doctor.mjs";
 import { deriveNextAction } from "./lib/resume.mjs";
 import { renderStatus } from "./lib/render-status.mjs";
 import { COMMAND_META, renderCommandHelp, renderHelp } from "./lib/help.mjs";
+import { partitionTouched } from "./lib/globmatch.mjs";
 
 function fail(msg) {
   process.stderr.write(msg + "\n");
@@ -530,32 +531,39 @@ function gitText(repoRoot, args, opts = {}) {
 
 // CLI reconcile uses a patch file instead of piping patch text to `git apply`; in sandboxed
 // subprocesses the stdin path can block, while file-based apply is deterministic.
-function reconcileTurnWorktreeForCli({ repoRoot, worktreePath, baselineRef, headAtOpen }) {
+function reconcileTurnWorktreeForCli({ repoRoot, worktreePath, baselineRef, headAtOpen, allowedPaths }) {
   if (!worktreePath || !baselineRef || !fs.existsSync(worktreePath)) return { applied: false, error: "missing worktree or baseline" };
   if (headAtOpen && gitText(repoRoot, ["rev-parse", "HEAD"]).stdout.trim() !== headAtOpen) return { applied: false, headMoved: true };
   if (gitText(worktreePath, ["add", "-A"]).code !== 0) return { applied: false, error: "git add failed in worktree" };
-  const nd = gitText(worktreePath, ["diff", "--cached", "--name-only", "-z", baselineRef, ...RECONCILE_EXCLUDES]);
+  const ndArgs = (Array.isArray(allowedPaths) && allowedPaths.length)
+    ? ["diff", "--cached", "--name-only", "-z", "--no-renames", baselineRef, ...RECONCILE_EXCLUDES]
+    : ["diff", "--cached", "--name-only", "-z", baselineRef, ...RECONCILE_EXCLUDES];
+  const nd = gitText(worktreePath, ndArgs);
   if (nd.code !== 0) return { applied: false, error: "git diff (names) failed" };
-  const names = nd.stdout.split("\0").filter(Boolean);
-  if (names.length === 0) return { applied: false, empty: true };
-  if (names.some((p) => p.includes("\n"))) return { applied: false, error: "touched path contains a newline — refusing to reconcile" };
+  const allNames = nd.stdout.split("\0").filter(Boolean);
+  if (allNames.some((p) => p.includes("\n"))) return { applied: false, error: "touched path contains a newline — refusing to reconcile" };
+  const { kept: names, dropped } = partitionTouched(allNames, allowedPaths);
+  if (names.length === 0) return { applied: false, empty: true, dropped, kept: [] };
   for (const p of names) {
     const bp = gitText(repoRoot, ["rev-parse", `${baselineRef}:${p}`]);
     const baseId = bp.code === 0 ? bp.stdout.trim() : null;
     const abs = path.join(repoRoot, p);
     const mainId = fs.existsSync(abs) ? gitText(repoRoot, ["hash-object", abs]).stdout.trim() : null;
-    if (baseId !== mainId) return { applied: false, drift: true, path: p };
+    if (baseId !== mainId) return { applied: false, drift: true, path: p, dropped, kept: names };
   }
-  const pd = gitText(worktreePath, ["diff", "--cached", "--binary", baselineRef, ...RECONCILE_EXCLUDES]);
+  const stripping = Array.isArray(allowedPaths) && allowedPaths.length > 0;
+  const pd = stripping
+    ? gitText(worktreePath, ["diff", "--cached", "--binary", "--no-renames", baselineRef, "--", ...names.map((n) => `:(literal)${n}`)])
+    : gitText(worktreePath, ["diff", "--cached", "--binary", baselineRef, ...RECONCILE_EXCLUDES]);
   if (pd.code !== 0) return { applied: false, error: "git diff (patch) failed" };
   const patchFile = path.join(os.tmpdir(), `jam-reconcile-${process.pid}-${Math.random().toString(36).slice(2)}.patch`);
   try {
     fs.writeFileSync(patchFile, pd.stdout);
     const check = gitText(repoRoot, ["apply", "--check", patchFile]);
-    if (check.code !== 0) return { applied: false, drift: true, stderr: check.stderr ?? "" };
+    if (check.code !== 0) return { applied: false, drift: true, stderr: check.stderr ?? "", dropped, kept: names };
     const apply = gitText(repoRoot, ["apply", patchFile]);
-    if (apply.code !== 0) return { applied: false, error: apply.stderr ?? "" };
-    return { applied: true };
+    if (apply.code !== 0) return { applied: false, error: apply.stderr ?? "", dropped, kept: names };
+    return { applied: true, kept: names, dropped };
   } finally {
     try { fs.rmSync(patchFile, { force: true }); } catch {}
   }
@@ -565,6 +573,14 @@ async function cmdCodexRun(cwd, positional, flags) {
   if (!flags["prompt-file"]) return fail("usage: jam codex-run --prompt-file <f> [--timeout <ms>] [--cwd <dir>] [--out-dir <dir>] [--sprint <id>] — the prompt file is written by the jam-prompting skill (Claude's instructions for this Codex turn)");
   let prompt;
   try { prompt = fs.readFileSync(flags["prompt-file"], "utf8"); } catch (e) { return fail(`cannot read prompt file: ${e.message}`); }
+  if (flags.sprint) {
+    const { dir } = requireActiveRun(cwd);
+    const state = readState(dir);
+    const sprint = state.plan?.sprints?.find((s) => s.id === flags.sprint);
+    if (Array.isArray(sprint?.allowedPaths) && sprint.allowedPaths.length > 0) {
+      prompt = `SCOPE LOCK — you may modify ONLY these paths:\n${sprint.allowedPaths.map((g) => `- ${g}`).join("\n")}\n\n${prompt}`;
+    }
+  }
   let outDir = flags["out-dir"] ? path.resolve(cwd, flags["out-dir"]) : fs.mkdtempSync(path.join(os.tmpdir(), "jam-codex-"));
   let turnWt = null;
   let baselineRef = null;
@@ -717,7 +733,11 @@ function reconcileActiveTurn(cwd, sprintId) {
     t = sprint.turn;
     if (!t.sessionId) return fail(`turn ${t.token}: bound session has no locatable/matching transcript - refusing`);
   }
-  const res = reconcileTurnWorktreeForCli({ repoRoot, worktreePath: t.worktreePath, baselineRef: t.baselineRef, headAtOpen: t.headAtOpen });
+  const res = reconcileTurnWorktreeForCli({ repoRoot, worktreePath: t.worktreePath, baselineRef: t.baselineRef, headAtOpen: t.headAtOpen, allowedPaths: sprint.allowedPaths });
+  if (res.dropped?.length) {
+    appendLedger(dir, { at: new Date().toISOString(), type: "turn-scope-stripped", sprintId, token: t.token, dropped: res.dropped, kept: res.kept ?? [] });
+    process.stdout.write(`scope-stripped ${res.dropped.length} out-of-allowlist path(s) from turn ${t.token}: ${res.dropped.join(", ")}\n`);
+  }
   if (res.headMoved) return fail("reconcile aborted: controller HEAD moved during the turn - a turn may have moved the branch via shared refs; inspect and reset before retrying");
   if (res.drift) return fail("reconcile aborted: main tree drifted from the turn baseline");
   if (res.error) return fail(`reconcile failed: ${res.error}`);
@@ -806,10 +826,10 @@ function cmdPlan(cwd, positional, flags) {
 
 function cmdPromoteSprint(cwd, positional, flags) {
   const id = positional[0];
-  if (!id || !flags.title || !flags.reason) return fail("usage: jam promote-sprint <id> --title <t> --reason <r> [--acceptance <a>] [--discovered-by <d>]");
+  if (!id || !flags.title || !flags.reason) return fail("usage: jam promote-sprint <id> --title <t> --reason <r> [--acceptance <a>] [--discovered-by <d>] [--allow <comma-globs>]");
   const { dir } = requireActiveRun(cwd);
   try {
-    promoteSprint({ runDir: dir, id, title: flags.title, acceptanceCriteria: flags.acceptance, discoveredBy: flags["discovered-by"], reason: flags.reason, needs: flags.needs ? String(flags.needs).split(",").map((x) => x.trim()).filter(Boolean) : [] });
+    promoteSprint({ runDir: dir, id, title: flags.title, acceptanceCriteria: flags.acceptance, discoveredBy: flags["discovered-by"], reason: flags.reason, needs: flags.needs ? String(flags.needs).split(",").map((x) => x.trim()).filter(Boolean) : [], allowedPaths: flags.allow ? String(flags.allow).split(",").map((x) => x.trim()).filter(Boolean) : undefined });
     process.stdout.write(`promoted sprint ${id} (provenance: promoted)\n`);
   } catch (e) { return fail(e.message); }
 }

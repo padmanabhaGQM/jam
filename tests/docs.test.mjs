@@ -147,11 +147,11 @@ test("jam skills close D1-D10 drift notes", () => {
   assert.match(greenfield, /HOW-JAM-WORKS\.md/);
 });
 
-test("package and plugin versions are 0.21.0", () => {
+test("package and plugin versions are 0.22.0", () => {
   const pkg = JSON.parse(read("package.json"));
   const plugin = JSON.parse(read("plugins/jam/.claude-plugin/plugin.json"));
-  assert.equal(pkg.version, "0.21.0");
-  assert.equal(plugin.version, "0.21.0");
+  assert.equal(pkg.version, "0.22.0");
+  assert.equal(plugin.version, "0.22.0");
   assert.equal(pkg.version, plugin.version);
 });
 

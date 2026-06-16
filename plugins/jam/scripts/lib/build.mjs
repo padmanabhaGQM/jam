@@ -20,7 +20,7 @@ export function recordBuildPlan({ runDir: dir, sprints, verifyCmd, now }) {
   // full schema validation (ids, titles, duplicates, acyclic graph) — same validator repair's recordPlan uses
   const { valid, errors } = validatePlan({ verifyCmd: state.spec.verifyCmd, sprints });
   if (!valid) throw new Error(`recordBuildPlan: invalid build plan: ${errors.join("; ")}`);
-  const mapped = sprints.map((s) => ({ id: s.id, title: s.title, acceptanceCriteria: s.acceptanceCriteria ?? "", status: "pending", provenance: "planned", needs: Array.isArray(s.needs) ? s.needs : [] }));
+  const mapped = sprints.map((s) => ({ id: s.id, title: s.title, acceptanceCriteria: s.acceptanceCriteria ?? "", status: "pending", provenance: "planned", needs: Array.isArray(s.needs) ? s.needs : [], ...(Array.isArray(s.allowedPaths) && s.allowedPaths.length ? { allowedPaths: s.allowedPaths } : {}) }));
   for (const id of Object.keys(state.gates)) if (id.startsWith("sprint-")) delete state.gates[id];
   state.plan = state.plan ?? {};
   state.plan.verifyCmd = state.spec.verifyCmd;   // re-assert the lock from the authoritative SSOT

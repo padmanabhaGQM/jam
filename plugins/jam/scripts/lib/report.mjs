@@ -35,11 +35,13 @@ export function evaluateReport({ ledger = [], state = {}, auditResult = null }) 
     const a = ts(started), b = ts(done);
     const ev = [...ledger].reverse().find((e) => e.type === "evidence" && e.sprintId === sp.id && e.gateId === `sprint-${sp.id}`) ?? null;
     const turnEvents = ledger.filter((e) => typeof e.type === "string" && e.type.startsWith("turn-") && e.sprintId === sp.id);
+    const scopeStripped = turnEvents.filter((e) => e.type === "turn-scope-stripped").length;
     const turn = turnEvents.length === 0 ? null : {
       opened: turnEvents.filter((e) => e.type === "turn-opened").length,
       reconciled: turnEvents.filter((e) => e.type === "turn-reconciled").length,
       discarded: turnEvents.filter((e) => e.type === "turn-discarded").length,
       unisolated: turnEvents.filter((e) => e.type === "turn-unisolated").length,
+      ...(scopeStripped ? { scopeStripped } : {}),
     };
     return {
       id: sp.id, title: sp.title ?? null, provenance: sp.provenance ?? null,
@@ -96,7 +98,7 @@ export function renderReport(r) {
   if (r.sprints.length) {
     L.push(`  sprints (${r.totals.done}/${r.totals.sprints} done${r.totals.totalSprintMs !== null ? `, ${fmtMs(r.totals.totalSprintMs)} total` : ""}):`);
     for (const s of r.sprints) {
-      const turn = s.turn ? `  turn ${s.turn.reconciled ? "reconciled" : s.turn.unisolated ? "unisolated" : s.turn.discarded ? "discarded" : "open"}` : "";
+      const turn = s.turn ? `  turn ${s.turn.reconciled ? "reconciled" : s.turn.unisolated ? "unisolated" : s.turn.discarded ? "discarded" : "open"}${s.turn.scopeStripped ? ` scope-stripped ${s.turn.scopeStripped}` : ""}` : "";
       L.push(`    ${s.id}  ${fmtMs(s.durationMs)}  codex-bound ${s.bound ? "✓" : "✗"} transcript ${s.transcriptRecorded ? "✓" : "✗"}  evidence exit ${s.evidenceExit ?? "—"}${turn}`);
     }
   }

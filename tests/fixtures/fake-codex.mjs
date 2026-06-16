@@ -7,10 +7,13 @@ import process from "node:process";
 const argv = process.argv.slice(2);
 const cdIdx = argv.indexOf("--cd");
 if (cdIdx >= 0 && argv[cdIdx + 1]) { try { process.chdir(argv[cdIdx + 1]); } catch {} }
-if (process.env.JAM_FAKE_EDIT) {
-  const [rel, ...rest] = process.env.JAM_FAKE_EDIT.split(":");
+function applyEdit(spec) {
+  if (!spec) return;
+  const [rel, ...rest] = spec.split(":");
   try { fs.appendFileSync(rel, rest.join(":") + "\n"); } catch {}
 }
+applyEdit(process.env.JAM_FAKE_EDIT);
+applyEdit(process.env.JAM_FAKE_EDIT2);
 const isResume = argv[0] === "exec" && argv[1] === "resume";
 const oIdx = argv.indexOf("-o");
 const lastMsg = oIdx >= 0 ? argv[oIdx + 1] : null;
@@ -20,7 +23,11 @@ const sessionId = isResume
 const mode = process.env.JAM_FAKE_MODE || "complete";
 
 // Drain stdin so the writer's pipe does not block.
-try { fs.readFileSync(0); } catch {}
+let receivedPrompt = "";
+try { receivedPrompt = fs.readFileSync(0, "utf8"); } catch {}
+if (process.env.JAM_FAKE_PROMPT_OUT) {
+  try { fs.writeFileSync(process.env.JAM_FAKE_PROMPT_OUT, receivedPrompt); } catch {}
+}
 
 function emit(obj) { process.stdout.write(JSON.stringify(obj) + "\n"); }
 
