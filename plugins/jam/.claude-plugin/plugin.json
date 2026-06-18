@@ -1,6 +1,6 @@
 {
   "name": "jam",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "description": "Honest, controlled Claude–Codex build loop. Composes openai/codex-plugin-cc; adds a deterministic control surface (gates, evidence, ledger, run-honesty audit, scope governance, sprint DAG).",
   "author": {
     "name": "Padmanabha Banerjee (Neel)"

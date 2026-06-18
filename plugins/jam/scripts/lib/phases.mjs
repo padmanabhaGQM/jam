@@ -112,6 +112,14 @@ export function advanceRun({ runDir: dir, now }) {
     if (result.exitCode !== 0) throw new Error(`cannot advance to FINISH: verifyCmd is currently red (exit ${result.exitCode}): ${cmd}`);
     // 4. Only now, after honesty AND liveness pass, record the final-verification.
     appendLedger(dir, { at: now ?? new Date().toISOString(), type: "final-verification", command: cmd, exitCode: 0 });
+    const finishCmd = state.plan?.finishCmd;
+    if (finishCmd) {
+      const finishResult = runVerification(finishCmd, projectRoot);
+      if (finishResult.exitCode !== 0) {
+        throw new Error(`cannot advance to FINISH: finishCmd is currently red (exit ${finishResult.exitCode}): ${finishCmd}`);
+      }
+      appendLedger(dir, { at: now ?? new Date().toISOString(), type: "final-finish-verification", command: finishCmd, exitCode: 0 });
+    }
   }
   // verified:true — advanceRun only reaches a FINISH transition after the live re-verify above (FINISH's
   // only predecessors are IMPLEMENT/BUILD, which always go through that block).

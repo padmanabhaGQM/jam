@@ -34,6 +34,9 @@ export function validatePlan(plan) {
   const errors = [];
   if (!plan || typeof plan !== "object") return { valid: false, errors: ["plan must be an object"] };
   if (!plan.verifyCmd || !String(plan.verifyCmd).trim()) errors.push('missing verifyCmd — expected { "verifyCmd": "npm test", "sprints": [...] }');
+  if ("finishCmd" in plan && (typeof plan.finishCmd !== "string" || !plan.finishCmd.trim())) {
+    errors.push("finishCmd, if present, must be a non-empty string");
+  }
   if (!Array.isArray(plan.sprints) || plan.sprints.length === 0) {
     errors.push("sprints must be a non-empty array");
   } else {
@@ -68,6 +71,7 @@ export function recordPlan({ runDir: dir, plan, now }) {
   for (const id of Object.keys(state.gates)) if (id.startsWith("sprint-")) delete state.gates[id];
   state.plan = {
     verifyCmd: plan.verifyCmd,
+    ...("finishCmd" in plan ? { finishCmd: plan.finishCmd } : {}),
     sprints: plan.sprints.map((s) => ({ id: s.id, title: s.title, acceptanceCriteria: s.acceptanceCriteria ?? "", status: "pending", provenance: "planned", needs: Array.isArray(s.needs) ? s.needs : [], ...(Array.isArray(s.allowedPaths) && s.allowedPaths.length ? { allowedPaths: s.allowedPaths } : {}) }))
   };
   g.status = "planned";

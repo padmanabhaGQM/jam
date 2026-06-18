@@ -33,6 +33,31 @@ test("validatePlan accepts a well-formed plan", () => {
   assert.deepEqual(validatePlan(planObj()), { valid: true, errors: [] });
 });
 
+test("validatePlan accepts and recordPlan stores optional finishCmd", () => {
+  const dir = runAtPlan();
+  const plan = { ...planObj(), finishCmd: "npm run finish" };
+  assert.deepEqual(validatePlan(plan), { valid: true, errors: [] });
+
+  recordPlan({ runDir: dir, plan, now: "t1" });
+  assert.equal(readState(dir).plan.finishCmd, "npm run finish");
+});
+
+test("validatePlan rejects malformed finishCmd when present", () => {
+  const empty = validatePlan({ ...planObj(), finishCmd: "" });
+  assert.equal(empty.valid, false);
+  assert.match(empty.errors.join("; "), /finishCmd, if present, must be a non-empty string/);
+
+  const nonString = validatePlan({ ...planObj(), finishCmd: 123 });
+  assert.equal(nonString.valid, false);
+  assert.match(nonString.errors.join("; "), /finishCmd, if present, must be a non-empty string/);
+});
+
+test("recordPlan leaves absent finishCmd undefined", () => {
+  const dir = runAtPlan();
+  recordPlan({ runDir: dir, plan: planObj(), now: "t1" });
+  assert.equal(readState(dir).plan.finishCmd, undefined);
+});
+
 test("validatePlan accepts absent or valid allowedPaths", () => {
   assert.deepEqual(validatePlan(planObj()), { valid: true, errors: [] });
   assert.deepEqual(validatePlan({

@@ -66,12 +66,20 @@ export function evaluateReport({ ledger = [], state = {}, auditResult = null }) 
   const finalVerification = fin
     ? { present: true, at: fin.at ?? null, command: fin.command ?? null, exitCode: fin.exitCode ?? null }
     : { present: false };
+  const finishFin = [...ledger].reverse().find((e) => e.type === "final-finish-verification") ?? null;
+  const finishVerification = finishFin
+    ? { present: true, at: finishFin.at ?? null, command: finishFin.command ?? null, exitCode: finishFin.exitCode ?? null }
+    : { present: false };
+  const plan = {
+    verifyCmd: state.plan?.verifyCmd ?? null,
+    finishCmd: state.plan?.finishCmd ?? null,
+  };
 
   return {
     run: { runId: state.runId ?? created?.runId ?? null, mode: state.mode ?? "repair", phase: state.phase ?? null,
            topic: state.topic ?? created?.topic ?? null, goalSet: ledger.some((e) => e.type === "goal-set"),
            createdAt, lastEventAt: stamps.length ? new Date(Math.max(...stamps)).toISOString() : null, wallMs },
-    phases, reviews, sprints, totals, finalVerification,
+    phases, reviews, sprints, totals, plan, finalVerification, finishVerification,
     audit: auditResult,
   };
 }
@@ -86,6 +94,9 @@ export function renderReport(r) {
   const L = [];
   L.push(`run ${r.run.runId ?? "?"} — ${r.run.mode} — ${r.run.phase ?? "?"}`);
   L.push(`  wall: ${fmtMs(r.run.wallMs)}   created: ${r.run.createdAt ?? "?"}`);
+  if (r.plan?.verifyCmd || r.plan?.finishCmd) {
+    L.push(`  plan: verify ${r.plan.verifyCmd ?? "—"}${r.plan.finishCmd ? ` · finish ${r.plan.finishCmd}` : ""}`);
+  }
   // dwellMs belongs to the phase ENTERED (p.to): time from this advance to the next one.
   if (r.phases.length) L.push(`  phases: ${r.phases[0].from} → ${r.phases.map((p) => p.dwellMs !== null ? `${p.to} ${fmtMs(p.dwellMs)}` : `${p.to}`).join(" → ")}`);
   const rv = [];
@@ -104,6 +115,7 @@ export function renderReport(r) {
   }
   if (r.totals.turnsOpened) L.push(`  turns: ${r.totals.turnsOpened} opened, ${r.totals.turnsReconciled} reconciled, ${r.totals.turnsDiscarded} discarded, ${r.totals.turnsUnisolated} unisolated`);
   L.push(`  final-verification: ${r.finalVerification.present ? `✓ ${r.finalVerification.command ?? ""} exit ${r.finalVerification.exitCode}` : "—"}`);
+  L.push(`  final-finish-verification: ${r.finishVerification.present ? `✓ ${r.finishVerification.command ?? ""} exit ${r.finishVerification.exitCode}` : "—"}`);
   L.push(`  audit: ${r.audit === null ? "—" : r.audit.error ? `(unavailable: ${r.audit.error})` : r.audit.ok ? "PASS" : `FAIL (${r.audit.failures.length})`}`);
   return L.join("\n") + "\n";
 }

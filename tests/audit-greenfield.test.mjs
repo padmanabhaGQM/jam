@@ -40,6 +40,40 @@ test("a full honest greenfield ledger passes the ordering audit", () => {
   assert.equal(r.ok, true);
 });
 
+test("a FINISH audit with finishCmd passes when final-finish-verification is green", () => {
+  const led = gfLedger();
+  const finishAdvance = led.findIndex((e) => e.type === "phase-advanced" && e.from === "BUILD" && e.to === "FINISH");
+  led.splice(finishAdvance, 0, { type: "final-finish-verification", command: "test -f built.flag", exitCode: 0 });
+  const st = gfState();
+  st.plan.finishCmd = "test -f built.flag";
+
+  const r = evaluateAudit({ ledger: led, state: st, transcriptExists: yes });
+
+  assert.equal(r.ok, true, r.failures.join("; "));
+});
+
+test("a FINISH audit with finishCmd fails without a green final-finish-verification", () => {
+  const st = gfState();
+  st.plan.finishCmd = "test -f built.flag";
+
+  const missing = evaluateAudit({ ledger: gfLedger(), state: st, transcriptExists: yes });
+  assert.equal(missing.ok, false);
+  assert.ok(missing.failures.includes("evidence: FINISH requires a final-finish-verification (finishCmd exit 0) recorded after the last sprint"));
+
+  const redLedger = gfLedger();
+  const finishAdvance = redLedger.findIndex((e) => e.type === "phase-advanced" && e.from === "BUILD" && e.to === "FINISH");
+  redLedger.splice(finishAdvance, 0, { type: "final-finish-verification", command: "test -f built.flag", exitCode: 1 });
+  const red = evaluateAudit({ ledger: redLedger, state: st, transcriptExists: yes });
+  assert.equal(red.ok, false);
+  assert.ok(red.failures.includes("evidence: FINISH requires a final-finish-verification (finishCmd exit 0) recorded after the last sprint"));
+});
+
+test("a FINISH audit without finishCmd still passes without final-finish-verification", () => {
+  const r = evaluateAudit({ ledger: gfLedger(), state: gfState(), transcriptExists: yes });
+
+  assert.equal(r.ok, true, r.failures.join("; "));
+});
+
 test("a greenfield phase advanced without its producing artifact fails the audit", () => {
   const led = gfLedger().filter((e) => e.type !== "spec-certified");   // drop SPECIFY's producer
   const r = evaluateAudit({ ledger: led, state: gfState(), transcriptExists: yes });
