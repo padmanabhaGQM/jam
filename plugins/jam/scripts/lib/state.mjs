@@ -62,6 +62,9 @@ export function validateState(state) {
     if (!VALID_MODES.includes(g.mode)) errors.push(`gate ${id}: invalid mode ${g.mode}`);
     if (!VALID_STATUSES.includes(g.status)) errors.push(`gate ${id}: invalid status ${g.status}`);
   }
+  if (state.plan && "finishCmd" in state.plan && (typeof state.plan.finishCmd !== "string" || !state.plan.finishCmd.trim())) {
+    errors.push("finishCmd, if present, must be a non-empty string");
+  }
   for (const sp of state.plan?.sprints ?? []) {
     if ("turn" in sp && sp.turn !== null) {
       const t = sp.turn;

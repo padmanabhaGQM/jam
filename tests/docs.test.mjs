@@ -147,11 +147,19 @@ test("jam skills close D1-D10 drift notes", () => {
   assert.match(greenfield, /HOW-JAM-WORKS\.md/);
 });
 
-test("package and plugin versions are 0.22.0", () => {
+test("jam help plan documents finishCmd", async () => {
+  const { COMMAND_META, renderCommandHelp } = await import("../plugins/jam/scripts/lib/help.mjs");
+  const text = renderCommandHelp(COMMAND_META, "plan");
+  assert.match(text, /finishCmd/);
+  assert.match(text, /END-TO-END integration proof/);
+  assert.match(text, /FINISH is blocked unless it exits 0/);
+});
+
+test("package and plugin versions are 0.23.0", () => {
   const pkg = JSON.parse(read("package.json"));
   const plugin = JSON.parse(read("plugins/jam/.claude-plugin/plugin.json"));
-  assert.equal(pkg.version, "0.22.0");
-  assert.equal(plugin.version, "0.22.0");
+  assert.equal(pkg.version, "0.23.0");
+  assert.equal(plugin.version, "0.23.0");
   assert.equal(pkg.version, plugin.version);
 });
 

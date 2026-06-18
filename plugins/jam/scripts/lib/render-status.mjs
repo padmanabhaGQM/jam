@@ -27,6 +27,7 @@ export function renderStatus(state, runId) {
   }
   if (state.plan) {
     lines.push(`  verify: ${state.plan.verifyCmd}`);
+    if (state.plan.finishCmd) lines.push(`  finish: ${state.plan.finishCmd}`);
     const done = new Set(state.plan.sprints.filter((s) => s.status === "done").map((s) => s.id));
     for (const sp of state.plan.sprints) {
       const needs = sp.needs ?? [];

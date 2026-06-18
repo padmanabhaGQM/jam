@@ -58,6 +58,34 @@ test("validateState accepts absent or valid sprint allowedPaths", () => {
   assert.deepEqual(validateState(valid), []);
 });
 
+test("validateState accepts and round-trips optional plan finishCmd", () => {
+  const root = tmpProject();
+  const dir = runDir(root, "r1");
+  const s = createInitialState({ runId: "r1", now: "t" });
+  s.plan = { verifyCmd: "true", finishCmd: "npm run finish", sprints: [{ id: "s1", title: "t", status: "pending" }] };
+  assert.deepEqual(validateState(s), []);
+
+  writeState(dir, s);
+  assert.equal(readState(dir).plan.finishCmd, "npm run finish");
+});
+
+test("validateState rejects malformed plan finishCmd when present", () => {
+  const empty = createInitialState({ runId: "r1", now: "t" });
+  empty.plan = { verifyCmd: "true", finishCmd: "", sprints: [{ id: "s1", title: "t", status: "pending" }] };
+  assert.ok(validateState(empty).some((e) => /finishCmd, if present, must be a non-empty string/.test(e)));
+
+  const nonString = createInitialState({ runId: "r2", now: "t" });
+  nonString.plan = { verifyCmd: "true", finishCmd: 123, sprints: [{ id: "s1", title: "t", status: "pending" }] };
+  assert.ok(validateState(nonString).some((e) => /finishCmd, if present, must be a non-empty string/.test(e)));
+});
+
+test("validateState accepts absent plan finishCmd", () => {
+  const s = createInitialState({ runId: "r1", now: "t" });
+  s.plan = { verifyCmd: "true", sprints: [{ id: "s1", title: "t", status: "pending" }] };
+  assert.deepEqual(validateState(s), []);
+  assert.equal(s.plan.finishCmd, undefined);
+});
+
 test("validateState rejects malformed sprint allowedPaths", () => {
   const nonString = createInitialState({ runId: "r1", now: "t" });
   nonString.plan = { verifyCmd: "true", sprints: [{ id: "s1", title: "t", status: "pending", allowedPaths: [123] }] };

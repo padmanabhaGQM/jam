@@ -47,7 +47,7 @@ The greenfield sub-gates use the same status mechanics: `GROUND-scope`, `CONVERG
 
 IMPLEMENT has no phase-level human approve/reject gate: close each sprint with the sprint loop verbs (`jam sprint <id> --start`, Codex, `jam reconcile --sprint <id>`, `jam sprint <id> --verify`, `jam sprint <id> --done`). Before `--done`, surface the sprint digest, evidence, transcript/session binding, and global verification result.
 
-FINISH has no human approve/reject gate: after all sprints are done, run `jam advance`, which refuses unless the honesty audit passes and the LIVE `verifyCmd` re-run succeeds. Surface the audit and final verification result, then use `jam report` for the recorded run report.
+FINISH has no human approve/reject gate: after all sprints are done, run `jam advance`, which refuses unless the honesty audit passes and the LIVE `verifyCmd` re-run succeeds. If the plan declares `finishCmd`, `jam advance` also runs it as the END-TO-END integration proof and refuses FINISH unless it exits 0. Surface the audit and final verification result, then use `jam report` for the recorded run report.
 
 ## Non-negotiables
 
@@ -205,7 +205,7 @@ jam ratify <id> --deny             # refuse
    Run this after VERIFY has been approved. If `jam advance` refuses (gate unsatisfied), satisfy the gate first — do not proceed manually.
 
 2. **Author the plan.**
-   Invoke `superpowers:writing-plans`. Working from the verified, adversarially-cleared diagnosis, decompose the fix into **sprints**: each sprint must be global-structural (not a local patch), tied to the goal's gates, and independently verifiable. Alongside the sprint list, define **`verifyCmd`** — the project's *global* acceptance gate (validators + reviewer scores; the command must exit 0 if and only if the goal's gates pass). The plan is not done until both are present.
+   Invoke `superpowers:writing-plans`. Working from the verified, adversarially-cleared diagnosis, decompose the fix into **sprints**: each sprint must be global-structural (not a local patch), tied to the goal's gates, and independently verifiable. Alongside the sprint list, define **`verifyCmd`** — the project's *global* acceptance gate (validators + reviewer scores; the command must exit 0 if and only if the goal's gates pass). The plan is not done until both are present. For slices whose real proof is integration-level (for example, a video render plus audit), declare optional **`finishCmd`** so the integration gate is enforced at FINISH while `verifyCmd` stays the incrementally-green per-sprint gate.
 
 3. **Challenge it.**
    Run `/codex:adversarial-review` on the plan. Codex must look for sequencing errors, gaps between sprints, and local-patch smells that would break the global acceptance gate. Resolve any blocker-level findings before recording.
@@ -213,7 +213,7 @@ jam ratify <id> --deny             # refuse
 4. **Record + gate.**
    Write `plan.json` with the shape:
    ```json
-   { "verifyCmd": "...", "sprints": [{ "id": "...", "title": "...", "acceptanceCriteria": "...", "allowedPaths": ["src/**"] }] }
+   { "verifyCmd": "...", "finishCmd": "...", "sprints": [{ "id": "...", "title": "...", "acceptanceCriteria": "...", "allowedPaths": ["src/**"] }] }
    ```
    `allowedPaths` is optional. Use it when a sprint has a natural file boundary.
    Then record it and flip the PLAN gate:

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { evaluateReport, renderReport } from "../plugins/jam/scripts/lib/report.mjs";
+import { renderStatus } from "../plugins/jam/scripts/lib/render-status.mjs";
 
 // Synthetic FULL-FEATURE run: phases, 2 sprints (one isolated turn), VERIFY rounds reaching 0 at round 3,
 // SLICE rounds reaching 0 at round 2, final-verification, audit PASS.
@@ -137,6 +138,55 @@ test("renderReport: renders the historical note + sections; plain text", () => {
     { at: "2026-06-11T10:01:00.000Z", type: "verification", gateId: "VERIFY", blockers: 0 },
   ], state: { runId: "h", mode: "repair", phase: "VERIFY" }, auditResult: null });
   assert.match(renderReport(hist), /round-level review data not recorded/);
+});
+
+test("evaluateReport/renderReport: surfaces finishCmd and final finish verification", () => {
+  const ledger = [
+    { at: "2026-06-11T10:00:00.000Z", type: "run-created", runId: "r-finish", topic: "demo" },
+    { at: "2026-06-11T10:05:00.000Z", type: "final-verification", command: "npm test", exitCode: 0 },
+    { at: "2026-06-11T10:06:00.000Z", type: "final-finish-verification", command: "npm run render:audit", exitCode: 0 },
+  ];
+  const state = {
+    runId: "r-finish",
+    mode: "repair",
+    phase: "FINISH",
+    plan: { verifyCmd: "npm test", finishCmd: "npm run render:audit", sprints: [] },
+  };
+  const r = evaluateReport({ ledger, state, auditResult: { ok: true, failures: [] } });
+  assert.deepEqual(r.plan, { verifyCmd: "npm test", finishCmd: "npm run render:audit" });
+  assert.equal(r.finishVerification.present, true);
+  assert.equal(r.finishVerification.command, "npm run render:audit");
+  assert.equal(r.finishVerification.exitCode, 0);
+
+  const text = renderReport(r);
+  assert.match(text, /plan: verify npm test · finish npm run render:audit/);
+  assert.match(text, /final-finish-verification: ✓ npm run render:audit exit 0/);
+});
+
+test("renderReport: absent final finish verification renders as dash", () => {
+  const r = evaluateReport({
+    ledger: [
+      { at: "2026-06-11T10:00:00.000Z", type: "run-created", runId: "r-no-finish", topic: "demo" },
+      { at: "2026-06-11T10:05:00.000Z", type: "final-verification", command: "npm test", exitCode: 0 },
+    ],
+    state: { runId: "r-no-finish", mode: "repair", phase: "FINISH", plan: { verifyCmd: "npm test", sprints: [] } },
+    auditResult: null,
+  });
+  assert.deepEqual(r.plan, { verifyCmd: "npm test", finishCmd: null });
+  assert.equal(r.finishVerification.present, false);
+  assert.match(renderReport(r), /final-finish-verification: —/);
+});
+
+test("renderStatus: shows finishCmd alongside plan verifyCmd when present", () => {
+  const text = renderStatus({
+    phase: "IMPLEMENT",
+    mode: "repair",
+    gates: {},
+    steeringDirectives: [],
+    plan: { verifyCmd: "npm test", finishCmd: "npm run render:audit", sprints: [] },
+  }, "r-status");
+  assert.match(text, /verify: npm test/);
+  assert.match(text, /finish: npm run render:audit/);
 });
 
 test("evaluateReport: unparseable timestamps yield null durations, no throw", () => {

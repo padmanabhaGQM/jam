@@ -12,6 +12,7 @@ export const SHAPES = {
 }`,
   plan: `{
   "verifyCmd": "npm test",
+  "finishCmd": "npm run render:audit",
   "sprints": [
     { "id": "s1", "title": "<unit of work>", "acceptanceCriteria": "<what done means>", "needs": [] }
   ]
@@ -62,6 +63,7 @@ export const COMMAND_META = {
     group: "Drive",
     summary: "Record the repair implementation plan and sprint graph.",
     usage: "jam plan --file <plan.json>",
+    when: "Optional finishCmd is a sibling of verifyCmd: use it for an END-TO-END integration proof such as render, e2e, or metric checks that cannot be incrementally green. It runs only at the →FINISH transition, in addition to the per-sprint verifyCmd re-run; FINISH is blocked unless it exits 0.",
     shape: "plan",
   },
   "codex-run": {

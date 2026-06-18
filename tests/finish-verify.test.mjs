@@ -11,12 +11,16 @@ const FAKE = fileURLToPath(new URL("./fixtures/fake-codex.mjs", import.meta.url)
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), "jam-finishv-")); }
 function jam(cwd, args, env = {}) { return spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: "utf8", env: { ...process.env, ...env } }); }
 function writeJSON(p, o) { fs.writeFileSync(p, JSON.stringify(o)); return p; }
+function ledgerEntries(root) {
+  const ledger = fs.readFileSync(path.join(root, "docs", "superpowers", "loop-runs", "r1", "ledger.jsonl"), "utf8");
+  return ledger.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
 function digestObj() {
   return { runId: "r1", phase: "DIAGNOSE", summary: "s", traceToArchitecture: { componentsTouched: ["A"], gapFromAgreed: null },
     decisions: [], globalMap: { mermaid: "graph TD; A-->B", currentPosition: "A", isLocallyScopedRisk: false }, coverage: { addressed: [], dropped: [] } };
 }
 // Drive r1 to a single DONE sprint "fix-1" with verifyCmd `test -f built.flag`; built.flag present so the sprint verifies.
-function runToAllSprintsDone(root) {
+function runToAllSprintsDone(root, { finishCmd } = {}) {
   const sid = "jam-fake-sess-finishv";
   const codexHome = tmp();
   fs.mkdirSync(path.join(codexHome, "sessions"), { recursive: true });
@@ -28,7 +32,9 @@ function runToAllSprintsDone(root) {
   jam(root, ["approve", "DIAGNOSE"]); jam(root, ["advance"]);
   jam(root, ["verify", "--file", writeJSON(path.join(root, "v.json"), { unresolvedBlockers: 0 })]);
   jam(root, ["approve", "VERIFY"]); jam(root, ["advance"]);
-  jam(root, ["plan", "--file", writeJSON(path.join(root, "plan.json"), { verifyCmd: "test -f built.flag", sprints: [{ id: "fix-1", title: "t", acceptanceCriteria: "ac" }] })]);
+  const plan = { verifyCmd: "test -f built.flag", sprints: [{ id: "fix-1", title: "t", acceptanceCriteria: "ac" }] };
+  if (finishCmd) plan.finishCmd = finishCmd;
+  jam(root, ["plan", "--file", writeJSON(path.join(root, "plan.json"), plan)]);
   jam(root, ["approve", "PLAN"]); jam(root, ["advance"]);
   jam(root, ["sprint", "fix-1", "--start"]);
   const pf = path.join(root, "p.md"); fs.writeFileSync(pf, "do it");
@@ -53,8 +59,32 @@ test("advance IMPLEMENT->FINISH SUCCEEDS + records final-verification when verif
   const r = jam(root, ["advance"]);
   assert.equal(r.status, 0);
   assert.match(jam(root, ["status"]).stdout, /phase FINISH/);
-  const ledger = fs.readFileSync(path.join(root, "docs", "superpowers", "loop-runs", "r1", "ledger.jsonl"), "utf8");
-  assert.match(ledger, /"type":"final-verification"/);
+  const ledger = ledgerEntries(root);
+  assert.ok(ledger.some((entry) => entry.type === "final-verification" && entry.exitCode === 0));
+  assert.equal(ledger.some((entry) => entry.type === "final-finish-verification"), false);
+});
+
+test("advance IMPLEMENT->FINISH with green finishCmd succeeds + records final-finish-verification", () => {
+  const root = tmp();
+  runToAllSprintsDone(root, { finishCmd: "test -f built.flag" });
+  const r = jam(root, ["advance"]);
+  assert.equal(r.status, 0);
+  assert.match(jam(root, ["status"]).stdout, /phase FINISH/);
+  const ledger = ledgerEntries(root);
+  assert.ok(ledger.some((entry) => entry.type === "final-verification" && entry.exitCode === 0));
+  assert.ok(ledger.some((entry) => entry.type === "final-finish-verification" && entry.command === "test -f built.flag" && entry.exitCode === 0));
+});
+
+test("advance IMPLEMENT->FINISH with red finishCmd is blocked after verifyCmd passes", () => {
+  const root = tmp();
+  runToAllSprintsDone(root, { finishCmd: "test -f missing.flag" });
+  const r = jam(root, ["advance"]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stdout + r.stderr, /finishCmd is currently red/);
+  assert.match(jam(root, ["status"]).stdout, /phase IMPLEMENT/);
+  const ledger = ledgerEntries(root);
+  assert.ok(ledger.some((entry) => entry.type === "final-verification" && entry.exitCode === 0));
+  assert.equal(ledger.some((entry) => entry.type === "final-finish-verification" && entry.exitCode === 0), false);
 });
 
 // Greenfield BUILD->FINISH shares the same advanceRun branch; prove the live-red refusal there too (lib-level).

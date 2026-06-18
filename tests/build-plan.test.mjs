@@ -21,6 +21,40 @@ test("recordBuildPlan sets sprints, keeps verifyCmd = the locked SSOT, opens BUI
   assert.equal(readState(dir).gates["BUILD-plan"].status, "approved");
 });
 
+test("recordBuildPlan carries optional finishCmd without replacing it with verifyCmd", () => {
+  const dir = atBuild(["WER<5%"], "exit 1");
+  recordBuildPlan({ runDir: dir, sprints: [{ id: "b1", title: "scaffold" }], finishCmd: "npm run finish", now: "t21" });
+  const s = readState(dir);
+  assert.equal(s.plan.verifyCmd, "exit 1");
+  assert.equal(s.plan.finishCmd, "npm run finish");
+});
+
+test("recordBuildPlan accepts absent finishCmd", () => {
+  const dir = atBuild(["WER<5%"], "exit 1");
+  recordBuildPlan({ runDir: dir, sprints: [{ id: "b1", title: "scaffold" }], now: "t21" });
+  assert.equal(readState(dir).plan.finishCmd, undefined);
+});
+
+test("recordBuildPlan rejects malformed finishCmd when present", () => {
+  const empty = atBuild(["WER<5%"], "exit 1");
+  assert.throws(
+    () => recordBuildPlan({ runDir: empty, sprints: [{ id: "b1", title: "scaffold" }], finishCmd: "" }),
+    /finishCmd, if present, must be a non-empty string/
+  );
+
+  const nonString = atBuild(["WER<5%"], "exit 1");
+  assert.throws(
+    () => recordBuildPlan({ runDir: nonString, sprints: [{ id: "b1", title: "scaffold" }], finishCmd: 123 }),
+    /finishCmd, if present, must be a non-empty string/
+  );
+
+  const explicitUndefined = atBuild(["WER<5%"], "exit 1");
+  assert.throws(
+    () => recordBuildPlan({ runDir: explicitUndefined, sprints: [{ id: "b1", title: "scaffold" }], finishCmd: undefined }),
+    /finishCmd, if present, must be a non-empty string/
+  );
+});
+
 test("KEY RED-TEAM: recordBuildPlan rejects a verifyCmd that differs from the certified SSOT", () => {
   const dir = atBuild(["WER<5%"], "exit 1");
   assert.throws(() => recordBuildPlan({ runDir: dir, sprints: [{ id: "b1", title: "x" }], verifyCmd: "exit 0" }), /locked to the certified SSOT|verifyCmd/);

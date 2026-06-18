@@ -255,6 +255,10 @@ export function evaluateAudit({ ledger = [], state = {}, transcriptExists }) {
     const lower = Math.max(lastSprintDone, lastRewound);
     const finalOk = ledger.some((e, i) => e.type === "final-verification" && e.exitCode === 0 && i > lower && (lastFinishAdv === -1 || i < lastFinishAdv));
     if (!finalOk) failures.push("evidence: FINISH requires a final-verification (verifyCmd exit 0) recorded after the last sprint");
+    if (state.plan?.finishCmd) {
+      const finishOk = ledger.some((e, i) => e.type === "final-finish-verification" && e.exitCode === 0 && i > lower && (lastFinishAdv === -1 || i < lastFinishAdv));
+      if (!finishOk) failures.push("evidence: FINISH requires a final-finish-verification (finishCmd exit 0) recorded after the last sprint");
+    }
     if ((state.plan?.sprints ?? []).length === 0 || !allSprintsDone(state)) failures.push("ordering: FINISH requires all planned sprints done");
     for (const [gid, g] of Object.entries(state.gates ?? {})) {
       if (g.status !== "rejected") continue;
